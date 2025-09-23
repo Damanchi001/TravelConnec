@@ -1,0 +1,12 @@
+# Brand Logo Assets
+# Place primary logo variations here:
+# - logo-primary.png (@1x, @2x, @3x) - Main logo on light backgrounds  
+# - logo-white.png (@1x, @2x, @3x) - Logo for dark backgrounds
+# - logo-icon-only.png (@1x, @2x, @3x) - Icon without text
+# - logo-horizontal.png (@1x, @2x, @3x) - Wide horizontal layout
+# - logo-vertical.png (@1x, @2x, @3x) - Tall vertical layout
+
+# Specifications:
+# - Format: PNG with transparency
+# - Base Size: 120x120px for square logo
+# - Colors: Use brand primary color (#0A7EA4)
