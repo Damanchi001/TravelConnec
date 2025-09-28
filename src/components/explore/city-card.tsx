@@ -1,5 +1,6 @@
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import React from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
@@ -20,13 +21,13 @@ interface CityCardProps {
 
 export const CityCard: React.FC<CityCardProps> = ({ city, onPress, onPlanTrip }) => {
   const backgroundColor = useThemeColor({}, 'background');
-  const tintColor = useThemeColor({}, 'tint');
+  const textColor = useThemeColor({}, 'text');
 
   return (
     <TouchableOpacity
       style={[styles.container, { backgroundColor }]}
       onPress={onPress}
-      activeOpacity={0.7}
+      activeOpacity={0.8}
     >
       <View style={styles.imageContainer}>
         <Image
@@ -35,23 +36,32 @@ export const CityCard: React.FC<CityCardProps> = ({ city, onPress, onPlanTrip })
           placeholder={require('@/assets/images/logo.png')}
           contentFit="cover"
         />
-      </View>
-      <View style={styles.content}>
-        <ThemedText type="defaultSemiBold" style={styles.name}>
-          {city.name}
-        </ThemedText>
-        <View style={styles.stats}>
-          <ThemedText style={styles.statText}>
-            {city.experiencesCount} Experiences
-          </ThemedText>
-          <ThemedText style={styles.statText}>
-            {city.localsCount} Locals
+        <View style={styles.overlay}>
+          <ThemedText type="defaultSemiBold" style={styles.overlayName}>
+            {city.name}
           </ThemedText>
         </View>
+      </View>
+      <View style={styles.content}>
+        <View style={styles.stats}>
+          <View style={styles.statItem}>
+            <Ionicons name="compass" size={16} color="#138AFE" />
+            <ThemedText style={styles.statText}>
+              {city.experiencesCount} Experiences
+            </ThemedText>
+          </View>
+          <View style={styles.statItem}>
+            <Ionicons name="people" size={16} color="#138AFE" />
+            <ThemedText style={styles.statText}>
+              {city.localsCount} Locals
+            </ThemedText>
+          </View>
+        </View>
         <TouchableOpacity
-          style={[styles.planTripButton, { backgroundColor: tintColor }]}
+          style={styles.planTripButton}
           onPress={onPlanTrip}
         >
+          <Ionicons name="airplane" size={16} color="#fff" />
           <ThemedText style={styles.planTripText}>
             Plan a Trip
           </ThemedText>
@@ -63,51 +73,70 @@ export const CityCard: React.FC<CityCardProps> = ({ city, onPress, onPlanTrip })
 
 const styles = StyleSheet.create({
   container: {
-    width: 200,
-    borderRadius: 12,
-    marginRight: 12,
+    width: 220,
+    borderRadius: 16,
+    marginRight: 16,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 4,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
     overflow: 'hidden',
   },
   imageContainer: {
-    height: 120,
+    height: 140,
+    position: 'relative',
   },
   image: {
     width: '100%',
     height: '100%',
   },
-  content: {
+  overlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.4)',
     padding: 12,
   },
-  name: {
-    fontSize: 16,
-    marginBottom: 8,
+  overlayName: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  content: {
+    padding: 16,
   },
   stats: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 16,
+  },
+  statItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   statText: {
-    fontSize: 12,
-    opacity: 0.7,
+    fontSize: 14,
+    opacity: 0.8,
   },
   planTripButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 6,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: '#138AFE',
   },
   planTripText: {
     color: '#fff',
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '600',
   },
 });

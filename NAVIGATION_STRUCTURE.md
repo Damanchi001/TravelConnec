@@ -220,7 +220,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
         }}
       />
-      
+
       {/* Search/Explore Tab */}
       <Tabs.Screen
         name="explore"
@@ -229,22 +229,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="magnifyingglass" color={color} />,
         }}
       />
-      
-      {/* Bookings Tab (Travelers) or Host Dashboard (Hosts) */}
-      <Tabs.Screen
-        name={isHost ? "host-dashboard" : "bookings"}
-        options={{
-          title: isHost ? 'Dashboard' : 'Trips',
-          tabBarIcon: ({ color }) => (
-            <IconSymbol 
-              size={28} 
-              name={isHost ? "chart.bar.fill" : "calendar"} 
-              color={color} 
-            />
-          ),
-        }}
-      />
-      
+
       {/* Messages Tab */}
       <Tabs.Screen
         name="messages"
@@ -254,7 +239,7 @@ export default function TabLayout() {
           tabBarBadge: unreadCount > 0 ? unreadCount.toString() : undefined,
         }}
       />
-      
+
       {/* Social Feed Tab */}
       <Tabs.Screen
         name="social"
@@ -263,7 +248,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="heart.fill" color={color} />,
         }}
       />
-      
+
       {/* Profile Tab */}
       <Tabs.Screen
         name="profile"
@@ -279,11 +264,9 @@ export default function TabLayout() {
 // Screen files:
 // app/(tabs)/index.tsx - Home/Discovery
 // app/(tabs)/explore.tsx - Search & Filters (enhanced)
-// app/(tabs)/bookings.tsx - User bookings management
-// app/(tabs)/host-dashboard.tsx - Host dashboard
 // app/(tabs)/messages.tsx - Chat interface
 // app/(tabs)/social.tsx - Social feed
-// app/(tabs)/profile.tsx - User profile
+// app/(tabs)/profile.tsx - User profile (includes bookings management)
 ```
 
 ### 6. Host Navigation Group
@@ -422,36 +405,32 @@ graph TD
 ### 2. Main App Navigation
 ```mermaid
 graph TD
-    A[Main App] --> B[Discover Tab]
-    A --> C[Search Tab]
-    A --> D[Trips/Dashboard Tab]
-    A --> E[Messages Tab]
-    A --> F[Social Tab]
-    A --> G[Profile Tab]
-    
-    B --> H[Featured Listings]
-    B --> I[Recommendations]
-    B --> J[Recent Activity]
-    
-    C --> K[Search Results]
-    C --> L[Map View]
-    C --> M[Filters Modal]
-    
-    D --> N{User Role}
-    N -->|Traveler| O[My Bookings]
-    N -->|Host/Both| P[Host Dashboard]
-    
-    E --> Q[Chat List]
-    E --> R[Individual Chat]
-    E --> S[Video Call]
-    
-    F --> T[Activity Feed]
-    F --> U[Post Composer]
-    F --> V[User Interactions]
-    
-    G --> W[Profile View]
-    G --> X[Settings]
-    G --> Y[Switch Role]
+     A[Main App] --> B[Discover Tab]
+     A --> C[Search Tab]
+     A --> D[Messages Tab]
+     A --> E[Social Tab]
+     A --> F[Profile Tab]
+
+     B --> G[Featured Listings]
+     B --> H[Recommendations]
+     B --> I[Recent Activity]
+
+     C --> J[Search Results]
+     C --> K[Map View]
+     C --> L[Filters Modal]
+
+     D --> M[Chat List]
+     D --> N[Individual Chat]
+     D --> O[Video Call]
+
+     E --> P[Activity Feed]
+     E --> Q[Post Composer]
+     E --> R[User Interactions]
+
+     F --> S[Profile View]
+     F --> T[Settings]
+     F --> U[My Bookings]
+     F --> V[Switch Role]
 ```
 
 ### 3. Booking Flow
@@ -596,7 +575,6 @@ export const linking = {
         screens: {
           index: '',
           explore: 'explore',
-          bookings: 'bookings',
           messages: 'messages',
           social: 'social',
           profile: 'profile',

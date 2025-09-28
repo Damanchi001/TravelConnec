@@ -1,20 +1,33 @@
 // Import polyfill first to handle import.meta issues
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { QueryClientProvider } from '@tanstack/react-query';
+import Constants from 'expo-constants';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect } from 'react';
 import 'react-native-reanimated';
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AuthErrorBoundary } from '@/src/components/auth';
 import { AuthProvider, useAuth } from '@/src/lib/auth-provider';
 import { queryClient } from '@/src/lib/react-query';
+import { ThemeProvider as CustomThemeProvider } from '@/src/lib/theme-provider';
 import { useAuthStore } from '@/src/stores/auth-store';
 import { getAuthRedirectPath } from '@/src/utils/navigationUtils';
 
+// Conditionally import Stripe only when not in Expo Go
+let initializeStripe: (() => Promise<void>) | null = null;
+try {
+  // Only import Stripe if we're not in Expo Go (which would cause web compatibility issues)
+  if (!Constants.expoConfig?.hostUri?.includes('exp://')) {
+    const stripeModule = require('@/src/services/stripe/client');
+    initializeStripe = stripeModule.default;
+  }
+} catch (error) {
+  console.warn('Stripe not available, skipping initialization');
+}
+
 export const unstable_settings = {
-  anchor: 'splash',
+  initialRouteName: 'splash',
 };
 
 function RootNavigator() {
@@ -33,6 +46,12 @@ function RootNavigator() {
 
       // Get current route
       const currentPath = `/${segments.join('/')}`;
+
+      // For unregistered users starting at onboarding, redirect to splash
+      if (!isAuthenticated && currentPath === '/onboarding/1') {
+        router.replace('/splash' as any);
+        return;
+      }
 
       // Determine where user should be based on auth state
       const redirectPath = getAuthRedirectPath(isAuthenticated, user, profile);
@@ -91,7 +110,10 @@ function RootNavigator() {
       <Stack.Screen name="onboarding" options={{ headerShown: false }} />
       <Stack.Screen name="auth" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="(host)" options={{ headerShown: false }} />
       <Stack.Screen name="(subscription)" options={{ headerShown: false }} />
+      <Stack.Screen name="booking" options={{ presentation: 'modal' }} />
+      <Stack.Screen name="call-logs" />
       <Stack.Screen name="(modals)" options={{ presentation: 'modal' }} />
       <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
     </Stack>
@@ -99,16 +121,23 @@ function RootNavigator() {
 }
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
+  useEffect(() => {
+    // Initialize Stripe on app startup (only if available)
+    if (initializeStripe) {
+      initializeStripe().catch(console.error);
+    }
+  }, []);
 
   return (
     <AuthErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-            <RootNavigator />
-            <StatusBar style="auto" />
-          </ThemeProvider>
+          <CustomThemeProvider>
+            <ThemeProvider value={DefaultTheme}>
+              <RootNavigator />
+              <StatusBar style="auto" />
+            </ThemeProvider>
+          </CustomThemeProvider>
         </AuthProvider>
       </QueryClientProvider>
     </AuthErrorBoundary>

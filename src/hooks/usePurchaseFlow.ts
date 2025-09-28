@@ -21,8 +21,7 @@ export function usePurchaseFlow(): UsePurchaseFlowReturn {
   const {
     startPurchase,
     completePurchase,
-    availableTiers,
-    status
+    availableTiers
   } = useSubscriptionStore();
 
   const purchasePlan = useCallback(async (planId: string): Promise<boolean> => {
@@ -81,7 +80,7 @@ export function usePurchaseFlow(): UsePurchaseFlowReturn {
     } finally {
       setIsPurchasing(false);
     }
-  }, [startPurchase, completePurchase, router]);
+  }, [startPurchase, completePurchase]);
 
   const restorePurchases = useCallback(async (): Promise<boolean> => {
     try {
@@ -153,7 +152,7 @@ export function usePurchaseFlow(): UsePurchaseFlowReturn {
         }
       ]
     );
-  }, [availableTiers, router]);
+  }, [availableTiers]);
 
   const clearError = useCallback(() => {
     setPurchaseError(null);

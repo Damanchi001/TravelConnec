@@ -20,10 +20,14 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   const textColor = useThemeColor({}, 'text');
   const tintColor = useThemeColor({}, 'tint');
 
+  const handleClear = () => {
+    onChangeText('');
+  };
+
   return (
     <View style={[styles.container, { backgroundColor }]}>
       <TouchableOpacity style={styles.iconContainer}>
-        <Ionicons name="search" size={20} color={tintColor} />
+        <Ionicons name="search" size={20} color="#138AFE" />
       </TouchableOpacity>
       <TextInput
         style={[styles.input, { color: textColor }]}
@@ -36,6 +40,11 @@ export const SearchBar: React.FC<SearchBarProps> = ({
         autoCapitalize="none"
         autoCorrect={false}
       />
+      {value.length > 0 && (
+        <TouchableOpacity style={styles.clearContainer} onPress={handleClear}>
+          <Ionicons name="close-circle" size={20} color="#999" />
+        </TouchableOpacity>
+      )}
     </View>
   );
 };
@@ -44,7 +53,7 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 12,
+    borderRadius: 16,
     paddingHorizontal: 16,
     paddingVertical: 12,
     marginHorizontal: 16,
@@ -52,11 +61,11 @@ const styles = StyleSheet.create({
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 4,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
   },
   iconContainer: {
     marginRight: 12,
@@ -65,5 +74,8 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     paddingVertical: 0,
+  },
+  clearContainer: {
+    marginLeft: 8,
   },
 });

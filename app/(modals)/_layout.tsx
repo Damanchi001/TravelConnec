@@ -11,6 +11,14 @@ export default function ModalLayout() {
           headerShown: false, // We handle our own header
         }}
       />
+      <Stack.Screen
+        name="edit-profile"
+        options={{
+          title: 'Edit Profile',
+          presentation: 'modal',
+          headerShown: false, // We handle our own header
+        }}
+      />
     </Stack>
   );
 }

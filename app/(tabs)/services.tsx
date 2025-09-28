@@ -1,339 +1,442 @@
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { IconSymbol, IconSymbolName } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { FlatList, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { LinearGradient } from "expo-linear-gradient";
+import { router } from "expo-router";
+import { Clock, Filter, Heart, MapPin, Plus, Star, User, Users } from "lucide-react-native";
+import React, { useState } from "react";
+import {
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { FeatureGate } from "../../src/components/subscription/FeatureGate";
 
-interface ServiceCategory {
-  id: string;
-  title: string;
-  icon: IconSymbolName;
-  description: string;
-  count: number;
-}
-
-interface ServiceItem {
-  id: string;
-  title: string;
-  host: string;
-  rating: number;
-  price: string;
-  image: string;
-  category: string;
-}
-
-const serviceCategories: ServiceCategory[] = [
-  {
-    id: 'tours',
-    title: 'Guided Tours',
-    icon: 'map.fill',
-    description: 'Explore destinations with local experts',
-    count: 24,
-  },
-  {
-    id: 'experiences',
-    title: 'Unique Experiences',
-    icon: 'sparkles',
-    description: 'One-of-a-kind activities and adventures',
-    count: 18,
-  },
-  {
-    id: 'classes',
-    title: 'Classes & Workshops',
-    icon: 'book.fill',
-    description: 'Learn new skills from local artisans',
-    count: 12,
-  },
-  {
-    id: 'food',
-    title: 'Food & Cooking',
-    icon: 'fork.knife',
-    description: 'Culinary experiences and dining',
-    count: 15,
-  },
-  {
-    id: 'adventure',
-    title: 'Adventure',
-    icon: 'figure.climbing',
-    description: 'Thrilling outdoor activities',
-    count: 9,
-  },
-  {
-    id: 'wellness',
-    title: 'Wellness',
-    icon: 'heart.fill',
-    description: 'Relaxation and rejuvenation',
-    count: 7,
-  },
+const SERVICE_CATEGORIES = [
+  { id: "all", name: "All", color: "#0EA5E9" },
+  { id: "experiences", name: "Experiences", color: "#8B5CF6" },
+  { id: "travel-gear", name: "Travel Gear", color: "#F97316" },
 ];
 
-const featuredServices: ServiceItem[] = [
+const FEATURED_SERVICES = [
   {
-    id: '1',
-    title: 'Private City Walking Tour',
-    host: 'Maria Rodriguez',
+    id: "1",
+    title: "Private Sunrise Tour at Mount Batur",
+    host: "Made Sutrisna",
+    hostAvatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face",
+    location: "Bali, Indonesia",
+    image: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=300&h=200&fit=crop",
     rating: 4.9,
-    price: '$45',
-    image: '🏙️',
-    category: 'tours',
+    reviews: 127,
+    price: 45,
+    duration: "6 hours",
+    maxGuests: 8,
+    category: "tours",
+    isVerified: true,
   },
   {
-    id: '2',
-    title: 'Traditional Cooking Class',
-    host: 'Chef Ahmed',
+    id: "2",
+    title: "Authentic Thai Cooking Class",
+    host: "Siriporn Kittikul",
+    hostAvatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&h=150&fit=crop&crop=face",
+    location: "Bangkok, Thailand",
+    image: "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=300&h=200&fit=crop",
     rating: 4.8,
-    price: '$65',
-    image: '👨‍🍳',
-    category: 'food',
+    reviews: 89,
+    price: 28,
+    duration: "3 hours",
+    maxGuests: 6,
+    category: "food",
+    isVerified: true,
   },
   {
-    id: '3',
-    title: 'Sunset Yoga Session',
-    host: 'Yoga Master Priya',
+    id: "3",
+    title: "Santorini Photography Session",
+    host: "Dimitris Papadopoulos",
+    hostAvatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&h=150&fit=crop&crop=face",
+    location: "Santorini, Greece",
+    image: "https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=300&h=200&fit=crop",
+    rating: 4.9,
+    reviews: 156,
+    price: 85,
+    duration: "2 hours",
+    maxGuests: 2,
+    category: "experiences",
+    isVerified: true,
+  },
+  {
+    id: "4",
+    title: "Tokyo Street Food Walking Tour",
+    host: "Yuki Tanaka",
+    hostAvatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face",
+    location: "Tokyo, Japan",
+    image: "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=300&h=200&fit=crop",
     rating: 4.7,
-    price: '$25',
-    image: '🧘‍♀️',
-    category: 'wellness',
+    reviews: 203,
+    price: 35,
+    duration: "4 hours",
+    maxGuests: 10,
+    category: "food",
+    isVerified: true,
   },
 ];
 
 export default function ServicesScreen() {
-  const colorScheme = useColorScheme();
+  const insets = useSafeAreaInsets();
+  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [favorites, setFavorites] = useState<string[]>([]);
 
-  const renderCategory = ({ item }: { item: ServiceCategory }) => (
-    <TouchableOpacity
-      style={[
-        styles.categoryCard,
-        { backgroundColor: Colors[colorScheme ?? 'light'].background },
-      ]}
-      onPress={() => {
-        // Navigate to category-specific services
-        console.log(`Navigate to ${item.id} services`);
-      }}>
-      <ThemedView style={styles.categoryIcon}>
-        <IconSymbol name={item.icon} size={32} color={Colors[colorScheme ?? 'light'].tint} />
-      </ThemedView>
-      <ThemedText type="subtitle" style={styles.categoryTitle}>
-        {item.title}
-      </ThemedText>
-      <ThemedText style={styles.categoryDescription}>
-        {item.description}
-      </ThemedText>
-      <ThemedText style={styles.categoryCount}>
-        {item.count} services
-      </ThemedText>
-    </TouchableOpacity>
-  );
+  const filteredServices = selectedCategory === "all" 
+    ? FEATURED_SERVICES 
+    : FEATURED_SERVICES.filter(service => service.category === selectedCategory);
 
-  const renderServiceItem = ({ item }: { item: ServiceItem }) => (
-    <TouchableOpacity
-      style={[
-        styles.serviceCard,
-        { backgroundColor: Colors[colorScheme ?? 'light'].background },
-      ]}
-      onPress={() => {
-        // Navigate to service details
-        console.log(`Navigate to service ${item.id}`);
-      }}>
-      <ThemedText style={styles.serviceImage}>{item.image}</ThemedText>
-      <ThemedView style={styles.serviceContent}>
-        <ThemedText type="subtitle" style={styles.serviceTitle} numberOfLines={2}>
-          {item.title}
-        </ThemedText>
-        <ThemedText style={styles.serviceHost}>by {item.host}</ThemedText>
-        <ThemedView style={styles.serviceFooter}>
-          <ThemedView style={styles.ratingContainer}>
-            <IconSymbol name="star.fill" size={14} color="#FFD700" />
-            <ThemedText style={styles.rating}>{item.rating}</ThemedText>
-          </ThemedView>
-          <ThemedText type="subtitle" style={styles.price}>
-            {item.price}
-          </ThemedText>
-        </ThemedView>
-      </ThemedView>
+  const toggleFavorite = (serviceId: string) => {
+    setFavorites(prev => 
+      prev.includes(serviceId) 
+        ? prev.filter(id => id !== serviceId)
+        : [...prev, serviceId]
+    );
+  };
+
+  const renderService = (service: typeof FEATURED_SERVICES[0]) => (
+    <TouchableOpacity 
+      key={service.id} 
+      style={styles.serviceCard}
+      onPress={() => router.push(`/listing/${service.id}`)}
+    >
+      <View style={styles.serviceImageContainer}>
+        <Image source={{ uri: service.image }} style={styles.serviceImage} />
+        <TouchableOpacity 
+          style={styles.favoriteButton}
+          onPress={() => toggleFavorite(service.id)}
+        >
+          <Heart 
+            size={20} 
+            color={favorites.includes(service.id) ? "#EF4444" : "#FFFFFF"} 
+            fill={favorites.includes(service.id) ? "#EF4444" : "transparent"}
+          />
+        </TouchableOpacity>
+        {service.isVerified && (
+          <View style={styles.verifiedBadge}>
+            <Text style={styles.verifiedText}>✓ Verified</Text>
+          </View>
+        )}
+      </View>
+      
+      <View style={styles.serviceInfo}>
+        <Text style={styles.serviceTitle} numberOfLines={2}>
+          {service.title}
+        </Text>
+        
+        <View style={styles.hostInfo}>
+          <Image source={{ uri: service.hostAvatar }} style={styles.hostAvatar} />
+          <Text style={styles.hostName}>Hosted by {service.host}</Text>
+        </View>
+        
+        <View style={styles.serviceLocation}>
+          <MapPin size={14} color="#64748B" />
+          <Text style={styles.locationText}>{service.location}</Text>
+        </View>
+        
+        <View style={styles.serviceDetails}>
+          <View style={styles.serviceDetail}>
+            <Clock size={14} color="#64748B" />
+            <Text style={styles.detailText}>{service.duration}</Text>
+          </View>
+          <View style={styles.serviceDetail}>
+            <Users size={14} color="#64748B" />
+            <Text style={styles.detailText}>Up to {service.maxGuests}</Text>
+          </View>
+        </View>
+        
+        <View style={styles.serviceFooter}>
+          <View style={styles.ratingContainer}>
+            <Star size={14} color="#FCD34D" fill="#FCD34D" />
+            <Text style={styles.rating}>{service.rating}</Text>
+            <Text style={styles.reviews}>({service.reviews})</Text>
+          </View>
+          <Text style={styles.price}>${service.price}</Text>
+        </View>
+      </View>
     </TouchableOpacity>
   );
 
   return (
-    <ThemedView style={styles.container}>
-      <ScrollView style={styles.scrollView}>
-      <ThemedView style={styles.header}>
-        <ThemedText type="title" style={styles.headerTitle}>
-          Travel Services
-        </ThemedText>
-        <ThemedText style={styles.headerSubtitle}>
-          Discover unique experiences and activities
-        </ThemedText>
-      </ThemedView>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <LinearGradient
+        colors={["#0EA5E9", "#0284C7"]}
+        style={styles.header}
+      >
+        <Text style={styles.headerTitle}>Services</Text>
+        <View style={styles.headerButtons}>
+          <FeatureGate
+            feature="create_paid_listings"
+            requiredTier="entrepreneur"
+          >
+            <TouchableOpacity
+              onPress={() => router.push("/list-service")}
+              style={styles.listServiceButton}
+            >
+              <Plus color="#FFFFFF" size={24} />
+            </TouchableOpacity>
+          </FeatureGate>
+          <TouchableOpacity
+            onPress={() => router.push("/profile")}
+            style={styles.profileButton}
+          >
+            <User color="#FFFFFF" size={24} />
+          </TouchableOpacity>
+        </View>
+      </LinearGradient>
+      
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.categoriesSection}>
+          <View style={styles.categoriesHeader}>
+            <Text style={styles.sectionTitle}>Categories</Text>
+            <TouchableOpacity>
+              <Filter size={20} color="#64748B" />
+            </TouchableOpacity>
+          </View>
+          
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={styles.categoriesContainer}>
+              {SERVICE_CATEGORIES.map((category) => (
+                <TouchableOpacity
+                  key={category.id}
+                  style={[
+                    styles.categoryButton,
+                    selectedCategory === category.id && {
+                      backgroundColor: category.color,
+                    },
+                  ]}
+                  onPress={() => setSelectedCategory(category.id)}
+                >
+                  <Text
+                    style={[
+                      styles.categoryText,
+                      selectedCategory === category.id && styles.categoryTextActive,
+                    ]}
+                  >
+                    {category.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </ScrollView>
+        </View>
 
-      <ThemedView style={styles.section}>
-        <ThemedText type="subtitle" style={styles.sectionTitle}>
-          Categories
-        </ThemedText>
-        <FlatList
-          data={serviceCategories}
-          renderItem={renderCategory}
-          keyExtractor={(item) => item.id}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoriesList}
-        />
-      </ThemedView>
-
-      <ThemedView style={styles.section}>
-        <ThemedText type="subtitle" style={styles.sectionTitle}>
-          Featured Services
-        </ThemedText>
-        <FlatList
-          data={featuredServices}
-          renderItem={renderServiceItem}
-          keyExtractor={(item) => item.id}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.servicesList}
-        />
-      </ThemedView>
-
-      <ThemedView style={styles.section}>
-        <TouchableOpacity
-          style={[
-            styles.exploreButton,
-            { backgroundColor: Colors[colorScheme ?? 'light'].tint },
-          ]}
-          onPress={() => {
-            // Navigate to full services list
-            console.log('Navigate to all services');
-          }}>
-          <ThemedText style={styles.exploreButtonText}>
-            Explore All Services
-          </ThemedText>
-          <IconSymbol name="arrow.right" size={20} color="white" />
-        </TouchableOpacity>
-      </ThemedView>
-    </ScrollView>
-  </ThemedView>
+        <View style={styles.servicesSection}>
+          <Text style={styles.sectionTitle}>
+            {selectedCategory === "all" ? "Featured Services" : `${SERVICE_CATEGORIES.find(c => c.id === selectedCategory)?.name} Services`}
+          </Text>
+          <Text style={styles.resultsCount}>
+            {filteredServices.length} services available
+          </Text>
+          
+          <View style={styles.servicesGrid}>
+            {filteredServices.map(renderService)}
+          </View>
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  scrollView: {
-    flex: 1,
+    backgroundColor: "#F8FAFC",
   },
   header: {
-    padding: 20,
-    paddingTop: 60,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 16,
   },
   headerTitle: {
-    marginBottom: 8,
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#FFFFFF",
+    flex: 1,
   },
-  headerSubtitle: {
-    opacity: 0.7,
+  headerButtons: {
+    flexDirection: "row",
+    alignItems: "center",
   },
-  section: {
-    marginBottom: 24,
+  listServiceButton: {
+    padding: 4,
+    marginRight: 8,
   },
-  sectionTitle: {
+  profileButton: {
+    padding: 4,
+  },
+  content: {
+    flex: 1,
+  },
+  categoriesSection: {
+    backgroundColor: "#FFFFFF",
+    paddingVertical: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
+  },
+  categoriesHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: 20,
     marginBottom: 16,
   },
-  categoriesList: {
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#1E293B",
+  },
+  categoriesContainer: {
+    flexDirection: "row",
     paddingHorizontal: 20,
-    gap: 12,
   },
-  categoryCard: {
-    width: 160,
-    padding: 16,
-    borderRadius: 12,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    alignItems: 'center',
+  categoryButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "#F1F5F9",
+    marginRight: 12,
   },
-  categoryIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: 'rgba(0, 122, 164, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
+  categoryText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#64748B",
   },
-  categoryTitle: {
-    textAlign: 'center',
-    marginBottom: 4,
+  categoryTextActive: {
+    color: "#FFFFFF",
   },
-  categoryDescription: {
-    textAlign: 'center',
-    fontSize: 12,
-    opacity: 0.7,
-    marginBottom: 8,
+  servicesSection: {
+    padding: 20,
   },
-  categoryCount: {
-    opacity: 0.6,
+  resultsCount: {
+    fontSize: 14,
+    color: "#64748B",
+    marginBottom: 20,
   },
-  servicesList: {
-    paddingHorizontal: 20,
-    gap: 12,
+  servicesGrid: {
+    gap: 16,
   },
   serviceCard: {
-    width: 280,
-    padding: 16,
-    borderRadius: 12,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    overflow: "hidden",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    flexDirection: 'row',
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  serviceImageContainer: {
+    position: "relative",
   },
   serviceImage: {
-    fontSize: 40,
-    marginRight: 12,
-    alignSelf: 'center',
+    width: "100%",
+    height: 200,
   },
-  serviceContent: {
-    flex: 1,
+  favoriteButton: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  verifiedBadge: {
+    position: "absolute",
+    top: 12,
+    left: 12,
+    backgroundColor: "#10B981",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  verifiedText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#FFFFFF",
+  },
+  serviceInfo: {
+    padding: 16,
   },
   serviceTitle: {
-    marginBottom: 4,
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#1E293B",
+    marginBottom: 12,
+    lineHeight: 24,
   },
-  serviceHost: {
-    fontSize: 12,
-    opacity: 0.7,
+  hostInfo: {
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 8,
   },
+  hostAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    marginRight: 8,
+  },
+  hostName: {
+    fontSize: 14,
+    color: "#64748B",
+  },
+  serviceLocation: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  locationText: {
+    fontSize: 14,
+    color: "#64748B",
+    marginLeft: 4,
+  },
+  serviceDetails: {
+    flexDirection: "row",
+    marginBottom: 16,
+  },
+  serviceDetail: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginRight: 20,
+  },
+  detailText: {
+    fontSize: 14,
+    color: "#64748B",
+    marginLeft: 4,
+  },
   serviceFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   ratingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   rating: {
-    fontSize: 12,
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#1E293B",
+    marginLeft: 4,
+  },
+  reviews: {
+    fontSize: 14,
+    color: "#64748B",
     marginLeft: 4,
   },
   price: {
-    color: '#0a7ea4',
-  },
-  exploreButton: {
-    marginHorizontal: 20,
-    padding: 16,
-    borderRadius: 12,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  exploreButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-    marginRight: 8,
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#0EA5E9",
   },
 });

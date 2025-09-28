@@ -32,14 +32,21 @@ class RevenueCatService {
     if (this.initialized) return;
 
     try {
-      // Configure RevenueCat
-      const apiKey = Platform.select({
+      // Configure RevenueCat - try platform-specific keys first, then fallback to generic
+      let apiKey = Platform.select({
         ios: process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY,
         android: process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY,
       });
 
+      // Fallback to generic key if platform-specific not found
       if (!apiKey) {
-        throw new Error('RevenueCat API key not found');
+        apiKey = process.env.EXPO_PUBLIC_REVENUECAT_API_KEY;
+      }
+
+
+      if (!apiKey) {
+        console.warn('RevenueCat API key not found - subscription features will be disabled');
+        return;
       }
 
       await Purchases.configure({
@@ -52,6 +59,7 @@ class RevenueCatService {
       }
 
       this.initialized = true;
+      console.log('RevenueCat initialized successfully');
     } catch (error) {
       console.error('RevenueCat initialization error:', error);
       throw error;

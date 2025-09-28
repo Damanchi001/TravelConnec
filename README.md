@@ -10,7 +10,32 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npm install
    ```
 
-2. Start the app
+2. Environment Setup
+
+   Copy `.env.local` and configure the following environment variables:
+
+   ```bash
+   # Supabase
+   EXPO_PUBLIC_SUPABASE_URL=your_supabase_url
+   EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+
+   # Stream Chat & Video
+   EXPO_PUBLIC_STREAM_API_KEY=your_stream_api_key
+
+   # RevenueCat Subscriptions
+   EXPO_PUBLIC_RC_IOS_API_KEY=your_revenuecat_ios_key
+   EXPO_PUBLIC_RC_ANDROID_API_KEY=your_revenuecat_android_key
+
+   # Stripe Payments (Marketplace)
+   EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_your_stripe_publishable_key
+
+   # Analytics (Optional)
+   EXPO_PUBLIC_SENTRY_DSN=your_sentry_dsn
+   ```
+
+   **Note**: Server-side Stripe secret keys should be configured in your Supabase Edge Functions environment.
+
+3. Start the app
 
    ```bash
    npx expo start

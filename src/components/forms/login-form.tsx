@@ -1,6 +1,7 @@
 import { useAuthStore } from '@/src/stores/auth-store';
 import React, { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { mapAuthError } from '../../utils/authErrorUtils';
 import { ErrorMessage } from './error-message';
 import { FormButton } from './form-button';
 import { FormInput } from './form-input';
@@ -82,14 +83,17 @@ export const LoginForm: React.FC<LoginFormProps> = ({
 
     try {
       const result = await signIn(formData.email.trim(), formData.password);
-      
+
       if (result.success) {
         onSuccess?.();
       } else {
-        setGeneralError(result.error || 'Login failed. Please try again.');
+        const error = result.error || 'Login failed. Please try again.';
+        const userFriendlyError = mapAuthError(error);
+        setGeneralError(userFriendlyError);
       }
-    } catch {
-      setGeneralError('An unexpected error occurred. Please try again.');
+    } catch (error: any) {
+      const userFriendlyError = mapAuthError(error);
+      setGeneralError(userFriendlyError);
     }
   };
 
@@ -109,11 +113,11 @@ export const LoginForm: React.FC<LoginFormProps> = ({
       </View>
 
       <View style={styles.form}>
-        <ErrorMessage 
-          message={generalError} 
-          visible={!!generalError}
-          testID="login-form-general-error"
-        />
+        {generalError && (
+          <ErrorMessage
+            message={generalError}
+          />
+        )}
 
         <FormInput
           label="Email"
@@ -123,6 +127,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
           placeholder="Enter your email"
           keyboardType="email-address"
           autoCapitalize="none"
+          autoFocus
           required
           testID="login-email-input"
         />

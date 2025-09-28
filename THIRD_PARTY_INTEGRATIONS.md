@@ -94,42 +94,62 @@ export const videoClient = new StreamVideoClient({
 - Push notifications for messages
 - Online presence indicators
 
-### 3. RevenueCat (Subscriptions & Payments)
-**Purpose**: Subscription management, premium features, payment processing
+### 3. Stripe Connect (Marketplace Payments, Escrow & Payouts)
+**Purpose**: Payment processing, escrow management, marketplace payouts, connected accounts
 
 ```typescript
 // Configuration
-interface RevenueCatConfig {
-  apiKey: {
-    ios: string;
-    android: string;
-  };
-  entitlements: Record<string, string>;
+interface StripeConfig {
+  publishableKey: string;
+  applicationFeePercent: number;
+  currency: string;
+  paymentMethods: string[];
 }
 
 // Installation
-npm install react-native-purchases
+npm install @stripe/stripe-react-native stripe
 
 // Setup
-// src/services/revenuecat/client.ts
-import Purchases, { PurchasesOffering } from 'react-native-purchases';
+// src/services/stripe/client.ts
+import { initStripe } from '@stripe/stripe-react-native';
 
-export const initializeRevenueCat = async () => {
-  if (Platform.OS === 'ios') {
-    await Purchases.configure({ apiKey: process.env.EXPO_PUBLIC_RC_IOS_API_KEY! });
-  } else {
-    await Purchases.configure({ apiKey: process.env.EXPO_PUBLIC_RC_ANDROID_API_KEY! });
-  }
+export const initializeStripe = async () => {
+  await initStripe({
+    publishableKey: process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY!,
+    merchantIdentifier: 'merchant.com.mynewtravelproject',
+    urlScheme: 'mynewtravelproject',
+  });
 };
+
+// Services
+// src/services/stripe/index.ts
+export {
+  initializeStripe,
+  createPaymentIntent,
+  createConnectedAccount,
+  createEscrow,
+  createPayout,
+} from './stripe';
 ```
 
 **Features Enabled:**
-- Subscription plan management
-- Premium feature unlocking
-- Cross-platform purchase validation
-- Receipt validation
-- Subscription analytics
-- A/B testing for paywalls
+- Payment intent creation with application fees (3% platform fee)
+- Stripe Connect Express accounts for hosts
+- Connected account onboarding and verification
+- Escrow management with automatic release
+- Scheduled payouts to hosts
+- Refund processing
+- Payment method management (cards, digital wallets)
+- Webhook handling for payment events
+- PCI compliance and security
+- Multi-currency support
+- Dispute management
+
+**Database Tables:**
+- `payments`: Payment transactions with Stripe payment intents
+- `escrow`: Funds held in escrow during booking lifecycle
+- `payouts`: Scheduled payouts to hosts
+- `stripe_connected_accounts`: Host Stripe Connect account details
 
 ## Maps & Location Services
 
@@ -314,6 +334,13 @@ npm install @tanstack/react-query
 export { supabase } from './supabase/client';
 export { chatClient, videoClient } from './stream/clients';
 export { initializeRevenueCat } from './revenuecat/client';
+export {
+  initializeStripe,
+  createPaymentIntent,
+  createConnectedAccount,
+  createEscrow,
+  createPayout,
+} from './stripe';
 export { locationService } from './location/service';
 export { notificationService } from './notifications/service';
 export { analyticsService } from './analytics/service';
@@ -321,6 +348,7 @@ export { analyticsService } from './analytics/service';
 // Centralized service initialization
 export const initializeServices = async (user: User) => {
   await Promise.all([
+    initializeStripe(),
     initializeRevenueCat(),
     chatClient.connectUser(user, streamToken),
     notificationService.initialize(user.id),
@@ -338,17 +366,20 @@ export default {
       // Supabase
       supabaseUrl: process.env.SUPABASE_URL,
       supabaseAnonKey: process.env.SUPABASE_ANON_KEY,
-      
+
       // Stream
       streamApiKey: process.env.STREAM_API_KEY,
-      
+
       // RevenueCat
       revenueCatIosKey: process.env.REVENUECAT_IOS_KEY,
       revenueCatAndroidKey: process.env.REVENUECAT_ANDROID_KEY,
-      
+
+      // Stripe
+      stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY,
+
       // Analytics
       sentryDsn: process.env.SENTRY_DSN,
-      
+
       // Maps (if using Google Maps)
       googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY,
     },
@@ -417,15 +448,31 @@ graph TD
 jest.mock('./services/supabase/client');
 jest.mock('./services/stream/clients');
 jest.mock('react-native-purchases');
+jest.mock('@stripe/stripe-react-native');
 
 // Test service integration
 describe('Service Integration', () => {
   test('should initialize all services', async () => {
     const user = mockUser();
     await initializeServices(user);
-    
+
     expect(chatClient.connectUser).toHaveBeenCalledWith(user, expect.any(String));
     expect(Purchases.logIn).toHaveBeenCalledWith(user.id);
+  });
+
+  test('should handle Stripe payment flow', async () => {
+    const bookingId = 'booking-123';
+    const amount = 10000; // $100.00
+
+    // Mock payment intent creation
+    const paymentIntent = await createPaymentIntent({
+      bookingId,
+      amount,
+      connectedAccountId: 'acct_host123',
+    });
+
+    expect(paymentIntent.amount).toBe(amount);
+    expect(paymentIntent.applicationFeeAmount).toBe(amount * 0.03); // 3% fee
   });
 });
 ```

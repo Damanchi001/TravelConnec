@@ -12,7 +12,7 @@ export interface AuthLoadingScreenProps {
 export function AuthLoadingScreen({ message = 'Loading...' }: AuthLoadingScreenProps) {
   return (
     <View style={styles.container}>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       
       {/* Logo */}
       <View style={styles.logoContainer}>

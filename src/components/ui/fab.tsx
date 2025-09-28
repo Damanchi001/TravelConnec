@@ -1,6 +1,5 @@
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol, IconSymbolName } from '@/components/ui/icon-symbol';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import React from 'react';
 import { StyleSheet, TouchableOpacity, ViewStyle } from 'react-native';
 
@@ -21,7 +20,6 @@ export const FAB: React.FC<FABProps> = ({
   disabled = false,
   style,
 }) => {
-  const colorScheme = useColorScheme();
 
   const sizeStyles = {
     small: { width: 48, height: 48, borderRadius: 24 },

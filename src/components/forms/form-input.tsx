@@ -48,8 +48,7 @@ export const FormInput: React.FC<FormInputProps> = ({
         error && styles.inputContainerError,
         style,
       ]}
-      onTouchStart={() => inputRef.current?.focus()}
-      >
+      onTouchStart={() => inputRef.current?.focus()}>
         <TextInput
           ref={inputRef}
           style={styles.input}
@@ -109,7 +108,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#fff',
     paddingHorizontal: 16,
-    minHeight: 52,
+    minHeight: 48,
   },
   inputContainerFocused: {
     borderColor: '#2196F3',

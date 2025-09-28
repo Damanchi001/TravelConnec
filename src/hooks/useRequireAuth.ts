@@ -16,8 +16,7 @@ export function useRequireAuth(options: RequireAuthOptions = {}) {
   const { isAuthenticated, isLoading, user, profile } = useAuthStore();
   
   const {
-    requireProfile = false,
-    redirectTo = '/welcome'
+    requireProfile = false
   } = options;
 
   useEffect(() => {

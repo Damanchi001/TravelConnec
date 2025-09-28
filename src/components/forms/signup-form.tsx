@@ -1,6 +1,7 @@
 import { useAuthStore } from '@/src/stores/auth-store';
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { logAuthError, mapAuthError, shouldShowAlert, showAuthErrorAlert } from '../../utils/authErrorUtils';
 import { ErrorMessage } from './error-message';
 import { FormButton } from './form-button';
 import { FormInput } from './form-input';
@@ -15,7 +16,6 @@ interface FormData {
   lastName: string;
   email: string;
   password: string;
-  confirmPassword: string;
 }
 
 interface FormErrors {
@@ -23,7 +23,6 @@ interface FormErrors {
   lastName?: string;
   email?: string;
   password?: string;
-  confirmPassword?: string;
 }
 
 export const SignupForm: React.FC<SignupFormProps> = ({
@@ -35,7 +34,6 @@ export const SignupForm: React.FC<SignupFormProps> = ({
     lastName: '',
     email: '',
     password: '',
-    confirmPassword: '',
   });
   const [errors, setErrors] = useState<FormErrors>({});
   const [generalError, setGeneralError] = useState<string>('');
@@ -97,12 +95,6 @@ export const SignupForm: React.FC<SignupFormProps> = ({
       }
     }
 
-    // Confirm password validation
-    if (!formData.confirmPassword) {
-      newErrors.confirmPassword = 'Please confirm your password';
-    } else if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
-    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -116,10 +108,6 @@ export const SignupForm: React.FC<SignupFormProps> = ({
       setErrors(prev => ({ ...prev, [field]: undefined }));
     }
     
-    // Clear confirm password error when password changes
-    if (field === 'password' && errors.confirmPassword) {
-      setErrors(prev => ({ ...prev, confirmPassword: undefined }));
-    }
     
     // Clear general error when user starts typing
     if (generalError) {
@@ -139,14 +127,30 @@ export const SignupForm: React.FC<SignupFormProps> = ({
         firstName: formData.firstName.trim(),
         lastName: formData.lastName.trim(),
       });
-      
+
       if (result.success) {
         onSuccess?.();
       } else {
-        setGeneralError(result.error || 'Registration failed. Please try again.');
+        const error = result.error || 'Registration failed. Please try again.';
+        const userFriendlyError = mapAuthError(error);
+
+        logAuthError(error, 'SignupForm.handleSubmit');
+
+        if (shouldShowAlert(error)) {
+          showAuthErrorAlert(error, 'Registration Failed');
+        } else {
+          setGeneralError(userFriendlyError);
+        }
       }
-    } catch {
-      setGeneralError('An unexpected error occurred. Please try again.');
+    } catch (error: any) {
+      const userFriendlyError = mapAuthError(error);
+      logAuthError(error, 'SignupForm.handleSubmit - catch');
+
+      if (shouldShowAlert(error)) {
+        showAuthErrorAlert(error, 'Registration Failed');
+      } else {
+        setGeneralError(userFriendlyError);
+      }
     }
   };
 
@@ -162,11 +166,11 @@ export const SignupForm: React.FC<SignupFormProps> = ({
       </View>
 
       <View style={styles.form}>
-        <ErrorMessage 
-          message={generalError} 
-          visible={!!generalError}
-          testID="signup-form-general-error"
-        />
+        {generalError && (
+          <ErrorMessage
+            message={generalError}
+          />
+        )}
 
         <View style={styles.nameRow}>
           <View style={styles.nameField}>
@@ -177,6 +181,7 @@ export const SignupForm: React.FC<SignupFormProps> = ({
               error={errors.firstName}
               placeholder="John"
               autoCapitalize="words"
+              autoFocus
               required
               testID="signup-firstname-input"
             />
@@ -219,16 +224,6 @@ export const SignupForm: React.FC<SignupFormProps> = ({
           testID="signup-password-input"
         />
 
-        <FormInput
-          label="Confirm Password"
-          value={formData.confirmPassword}
-          onChangeText={(value) => handleInputChange('confirmPassword', value)}
-          error={errors.confirmPassword}
-          placeholder="Confirm your password"
-          isPassword
-          required
-          testID="signup-confirm-password-input"
-        />
 
         <Text style={styles.passwordHint}>
           Password must be at least 8 characters with uppercase, lowercase, and numbers

@@ -47,7 +47,7 @@ interface UseSubscriptionFeaturesReturn {
 }
 
 export function useSubscriptionFeatures(): UseSubscriptionFeaturesReturn {
-  const { features, status, canAccessFeature, requiresUpgrade: storeRequiresUpgrade } = useSubscriptionStore();
+  const { features, status, requiresUpgrade: storeRequiresUpgrade } = useSubscriptionStore();
   const { showUpgradePrompt: showPurchasePrompt } = usePurchaseFlow();
 
   const showUpgradePrompt = useCallback((feature: string, requiredTier: string) => {

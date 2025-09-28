@@ -19,7 +19,7 @@ config.resolver = {
     return context.resolveRequest(context, moduleName, platform);
   },
   blockList: [
-    /node_modules\/.*\/esm\/.*\.js$/, // Block ESM versions
+    /node_modules\/(?!lucide-react-native|stream-chat|axios|@stream-io).*\/esm\/.*\.js$/, // Block ESM versions except lucide-react-native, stream-chat, axios, and @stream-io packages
   ],
 };
 

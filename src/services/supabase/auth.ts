@@ -16,10 +16,20 @@ export interface SignInData {
 export interface UserProfile {
   id: string;
   email: string;
+  username?: string;
   first_name: string;
   last_name: string;
+  phone?: string;
+  date_of_birth?: string;
   avatar_url?: string;
+  bio?: string;
   user_type: 'traveler' | 'host' | 'both';
+  status?: string;
+  verification_status?: string;
+  languages?: string[];
+  location?: any;
+  preferences?: any;
+  social_links?: any;
   is_verified: boolean;
   created_at: string;
   updated_at: string;
@@ -70,12 +80,18 @@ export class AuthService {
   }
 
   /**
-   * Sign out the current user
-   */
-  static async signOut(): Promise<{ error: AuthError | null }> {
-    const { error } = await supabase.auth.signOut();
-    return { error };
-  }
+    * Sign out the current user
+    */
+   static async signOut(): Promise<{ error: AuthError | null }> {
+     console.log('[AuthService] Calling supabase.auth.signOut()');
+     const { error } = await supabase.auth.signOut();
+     if (error) {
+       console.error('[AuthService] supabase.auth.signOut() error:', error);
+     } else {
+       console.log('[AuthService] supabase.auth.signOut() completed successfully');
+     }
+     return { error };
+   }
 
   /**
    * Get current user
@@ -109,22 +125,60 @@ export class AuthService {
   }
 
   /**
-   * Create user profile after sign up
+   * Create user profile after sign up or social auth
    */
-  private static async createUserProfile(user: User, firstName: string, lastName: string) {
-    const { error } = await supabase
-      .from('profiles')
-      .insert({
-        id: user.id,
-        email: user.email,
-        first_name: firstName,
-        last_name: lastName,
-        user_type: 'traveler', // Default to traveler, can be changed later
-        is_verified: false,
-      });
+  static async createUserProfile(user: User, firstName?: string, lastName?: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      console.log('[AuthService] Creating user profile for:', user.id, user.email);
 
-    if (error) {
-      console.error('Error creating user profile:', error);
+      // For social auth, try to extract names from user metadata
+      const metadata = user.user_metadata || {};
+      console.log('[AuthService] User metadata:', metadata);
+
+      let profileFirstName = firstName || '';
+      let profileLastName = lastName || '';
+
+      // Try different metadata fields for names
+      if (!profileFirstName) {
+        profileFirstName = metadata.first_name || metadata.given_name || metadata.name?.split(' ')[0] || '';
+      }
+
+      if (!profileLastName) {
+        profileLastName = metadata.last_name || metadata.family_name || '';
+        // If we have a full name but no last name, try to extract it
+        if (!profileLastName && metadata.name && metadata.name.split(' ').length > 1) {
+          const nameParts = metadata.name.split(' ');
+          profileLastName = nameParts.slice(1).join(' ');
+        }
+      }
+
+      // Ensure we have valid strings
+      profileFirstName = profileFirstName.trim();
+      profileLastName = profileLastName.trim();
+
+      console.log('[AuthService] Extracted names:', { firstName: profileFirstName, lastName: profileLastName });
+
+      const { error } = await supabase
+        .from('profiles')
+        .insert({
+          id: user.id,
+          email: user.email,
+          first_name: profileFirstName,
+          last_name: profileLastName,
+          user_type: 'traveler', // Default to traveler, can be changed later
+          is_verified: false,
+        });
+
+      if (error) {
+        console.error('[AuthService] Error creating user profile:', error);
+        return { success: false, error: error.message };
+      }
+
+      console.log('[AuthService] User profile created successfully');
+      return { success: true };
+    } catch (error: any) {
+      console.error('[AuthService] Exception creating user profile:', error);
+      return { success: false, error: error.message || 'Failed to create user profile' };
     }
   }
 
@@ -151,6 +205,87 @@ export class AuthService {
       .eq('id', userId);
 
     return { error };
+  }
+
+  /**
+   * Sign in with Google OAuth
+   */
+  static async signInWithGoogle(): Promise<{ data: any; error: AuthError | null }> {
+    try {
+      console.log('[AuthService] Starting Google OAuth sign-in');
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: undefined, // Let Supabase handle the redirect for React Native
+          skipBrowserRedirect: false, // Allow browser redirect for OAuth flow
+        },
+      });
+
+      if (error) {
+        console.error('[AuthService] Google OAuth error:', error);
+        return { data: null, error };
+      }
+
+      console.log('[AuthService] Google OAuth initiated successfully');
+      return { data, error: null };
+    } catch (error) {
+      console.error('[AuthService] Google OAuth exception:', error);
+      return { data: null, error: error as AuthError };
+    }
+  }
+
+  /**
+   * Sign in with Facebook OAuth
+   */
+  static async signInWithFacebook(): Promise<{ data: any; error: AuthError | null }> {
+    try {
+      console.log('[AuthService] Starting Facebook OAuth sign-in');
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'facebook',
+        options: {
+          redirectTo: undefined,
+          skipBrowserRedirect: false,
+        },
+      });
+
+      if (error) {
+        console.error('[AuthService] Facebook OAuth error:', error);
+        return { data: null, error };
+      }
+
+      console.log('[AuthService] Facebook OAuth initiated successfully');
+      return { data, error: null };
+    } catch (error) {
+      console.error('[AuthService] Facebook OAuth exception:', error);
+      return { data: null, error: error as AuthError };
+    }
+  }
+
+  /**
+   * Sign in with Apple OAuth
+   */
+  static async signInWithApple(): Promise<{ data: any; error: AuthError | null }> {
+    try {
+      console.log('[AuthService] Starting Apple OAuth sign-in');
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'apple',
+        options: {
+          redirectTo: undefined,
+          skipBrowserRedirect: false,
+        },
+      });
+
+      if (error) {
+        console.error('[AuthService] Apple OAuth error:', error);
+        return { data: null, error };
+      }
+
+      console.log('[AuthService] Apple OAuth initiated successfully');
+      return { data, error: null };
+    } catch (error) {
+      console.error('[AuthService] Apple OAuth exception:', error);
+      return { data: null, error: error as AuthError };
+    }
   }
 }
 

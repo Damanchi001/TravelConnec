@@ -1,5 +1,6 @@
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import React from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
@@ -25,7 +26,7 @@ export const CountryCard: React.FC<CountryCardProps> = ({ country, onPress }) =>
     <TouchableOpacity
       style={[styles.container, { backgroundColor }]}
       onPress={onPress}
-      activeOpacity={0.7}
+      activeOpacity={0.8}
     >
       <View style={styles.imageContainer}>
         <Image
@@ -34,18 +35,26 @@ export const CountryCard: React.FC<CountryCardProps> = ({ country, onPress }) =>
           placeholder={require('@/assets/images/logo.png')}
           contentFit="cover"
         />
+        <View style={styles.overlay}>
+          <ThemedText type="defaultSemiBold" style={styles.overlayName}>
+            {country.name}
+          </ThemedText>
+        </View>
       </View>
       <View style={styles.content}>
-        <ThemedText type="defaultSemiBold" style={styles.name}>
-          {country.name}
-        </ThemedText>
         <View style={styles.stats}>
-          <ThemedText style={styles.statText}>
-            {country.citiesCount} Cities
-          </ThemedText>
-          <ThemedText style={styles.statText}>
-            {country.localsCount} Locals
-          </ThemedText>
+          <View style={styles.statItem}>
+            <Ionicons name="location" size={14} color="#138AFE" />
+            <ThemedText style={styles.statText}>
+              {country.citiesCount} Cities
+            </ThemedText>
+          </View>
+          <View style={styles.statItem}>
+            <Ionicons name="people" size={14} color="#138AFE" />
+            <ThemedText style={styles.statText}>
+              {country.localsCount} Locals
+            </ThemedText>
+          </View>
         </View>
       </View>
     </TouchableOpacity>
@@ -54,39 +63,54 @@ export const CountryCard: React.FC<CountryCardProps> = ({ country, onPress }) =>
 
 const styles = StyleSheet.create({
   container: {
-    width: 160,
-    borderRadius: 12,
-    marginRight: 12,
+    width: 180,
+    borderRadius: 16,
+    marginRight: 16,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 4,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
     overflow: 'hidden',
   },
   imageContainer: {
-    height: 100,
+    height: 120,
+    position: 'relative',
   },
   image: {
     width: '100%',
     height: '100%',
   },
-  content: {
-    padding: 12,
+  overlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    padding: 10,
   },
-  name: {
+  overlayName: {
+    color: '#fff',
     fontSize: 16,
-    marginBottom: 8,
+    fontWeight: '700',
+  },
+  content: {
+    padding: 14,
   },
   stats: {
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
+  statItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   statText: {
-    fontSize: 12,
-    opacity: 0.7,
+    fontSize: 13,
+    opacity: 0.8,
   },
 });

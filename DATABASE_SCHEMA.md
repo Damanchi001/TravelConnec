@@ -145,6 +145,12 @@ CREATE TABLE public.bookings (
   
   -- Metadata
   booking_code TEXT UNIQUE NOT NULL, -- Human readable booking reference
+
+  -- Payment & Process Tracking
+  escrow_id UUID REFERENCES public.escrow(id),
+  check_in_id UUID REFERENCES public.check_ins(id),
+  payout_id UUID REFERENCES public.payouts(id),
+
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -166,12 +172,87 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trigger_set_booking_code 
-  BEFORE INSERT ON public.bookings 
+CREATE TRIGGER trigger_set_booking_code
+  BEFORE INSERT ON public.bookings
   FOR EACH ROW EXECUTE FUNCTION set_booking_code();
 ```
 
-#### 4. Reviews Table
+#### 3.1 Payments Table
+```sql
+CREATE TABLE public.payments (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  booking_id UUID REFERENCES public.bookings(id) NOT NULL,
+  stripe_payment_intent_id TEXT NOT NULL UNIQUE,
+  amount DECIMAL(10,2) NOT NULL,
+  currency TEXT DEFAULT 'USD',
+  platform_fee DECIMAL(10,2) NOT NULL,
+  host_amount DECIMAL(10,2) NOT NULL,
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'succeeded', 'failed', 'canceled')),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX idx_payments_booking_id ON public.payments(booking_id);
+CREATE INDEX idx_payments_stripe_payment_intent_id ON public.payments(stripe_payment_intent_id);
+```
+
+#### 3.2 Escrow Table
+```sql
+CREATE TABLE public.escrow (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  booking_id UUID REFERENCES public.bookings(id) NOT NULL UNIQUE,
+  status TEXT DEFAULT 'held' CHECK (status IN ('held', 'released', 'disputed')),
+  held_amount DECIMAL(10,2) NOT NULL,
+  released_amount DECIMAL(10,2) DEFAULT 0,
+  release_date TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX idx_escrow_booking_id ON public.escrow(booking_id);
+```
+
+#### 3.3 Check-ins Table
+```sql
+CREATE TABLE public.check_ins (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  booking_id UUID REFERENCES public.bookings(id) NOT NULL UNIQUE,
+  checked_in_at TIMESTAMPTZ NOT NULL,
+  checked_in_by UUID REFERENCES public.user_profiles(id) NOT NULL,
+  method TEXT DEFAULT 'self' CHECK (method IN ('self', 'host', 'code')),
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX idx_check_ins_booking_id ON public.check_ins(booking_id);
+```
+
+#### 3.4 Payouts Table
+```sql
+CREATE TABLE public.payouts (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  booking_id UUID REFERENCES public.bookings(id) NOT NULL UNIQUE,
+  host_id UUID REFERENCES public.user_profiles(id) NOT NULL,
+  amount DECIMAL(10,2) NOT NULL,
+  currency TEXT DEFAULT 'USD',
+  stripe_transfer_id TEXT,
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'paid', 'failed')),
+  scheduled_at TIMESTAMPTZ,
+  paid_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX idx_payouts_booking_id ON public.payouts(booking_id);
+CREATE INDEX idx_payouts_host_id ON public.payouts(host_id);
+CREATE INDEX idx_payouts_status ON public.payouts(status);
+```
+
+#### 5. Reviews Table
 ```sql
 CREATE TABLE public.reviews (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -208,7 +289,7 @@ CREATE UNIQUE INDEX idx_reviews_unique_booking_reviewer
 ON public.reviews(booking_id, reviewer_id);
 ```
 
-#### 5. Messages Table (Stream Integration)
+#### 6. Messages Table (Stream Integration)
 ```sql
 -- Simplified message logging for analytics, main chat handled by Stream
 CREATE TABLE public.message_threads (
@@ -223,7 +304,7 @@ CREATE TABLE public.message_threads (
 );
 ```
 
-#### 6. Social Posts Table
+#### 7. Social Posts Table
 ```sql
 CREATE TYPE post_type AS ENUM ('text', 'image', 'video', 'listing_share', 'trip_update');
 CREATE TYPE post_status AS ENUM ('draft', 'published', 'archived', 'reported');
@@ -259,7 +340,7 @@ CREATE TABLE public.social_posts (
 );
 ```
 
-#### 7. Subscriptions Table (RevenueCat Integration)
+#### 8. Subscriptions Table (RevenueCat Integration)
 ```sql
 CREATE TYPE subscription_status AS ENUM ('active', 'cancelled', 'expired', 'trial', 'paused');
 CREATE TYPE subscription_tier AS ENUM ('basic', 'premium', 'host_pro', 'enterprise');
@@ -299,7 +380,7 @@ WHERE status = 'active';
 
 ### Supporting Tables
 
-#### 8. Amenities Table
+#### 9. Amenities Table
 ```sql
 CREATE TABLE public.amenities (
   id TEXT PRIMARY KEY, -- wifi, pool, parking, etc.
@@ -311,7 +392,7 @@ CREATE TABLE public.amenities (
 );
 ```
 
-#### 9. User Favorites Table
+#### 10. User Favorites Table
 ```sql
 CREATE TABLE public.user_favorites (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -323,7 +404,7 @@ CREATE TABLE public.user_favorites (
 );
 ```
 
-#### 10. Search History Table
+#### 11. Search History Table
 ```sql
 CREATE TABLE public.search_history (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -344,6 +425,88 @@ CREATE TABLE public.search_history (
   
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+```
+
+#### 12. Listing Analytics Table
+```sql
+CREATE TABLE public.listing_analytics (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  listing_id UUID REFERENCES public.listings(id) NOT NULL,
+  date DATE NOT NULL,
+  views INTEGER DEFAULT 0,
+  bookings INTEGER DEFAULT 0,
+  revenue DECIMAL(10,2) DEFAULT 0,
+  average_rating DECIMAL(3,2) DEFAULT 0,
+  review_count INTEGER DEFAULT 0,
+  occupancy_rate DECIMAL(5,2) DEFAULT 0, -- Percentage of available nights booked
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+
+  UNIQUE(listing_id, date)
+);
+
+-- Indexes for listing analytics
+CREATE INDEX idx_listing_analytics_listing_id ON public.listing_analytics(listing_id);
+CREATE INDEX idx_listing_analytics_date ON public.listing_analytics(date);
+CREATE INDEX idx_listing_analytics_listing_date ON public.listing_analytics(listing_id, date DESC);
+```
+
+#### 13. Host Earnings Summary Table
+```sql
+CREATE TABLE public.host_earnings_summary (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  host_id UUID REFERENCES public.user_profiles(id) NOT NULL,
+  period_start DATE NOT NULL,
+  period_end DATE NOT NULL,
+  period_type TEXT DEFAULT 'monthly' CHECK (period_type IN ('daily', 'weekly', 'monthly', 'yearly')),
+  total_bookings INTEGER DEFAULT 0,
+  total_revenue DECIMAL(10,2) DEFAULT 0,
+  total_payouts DECIMAL(10,2) DEFAULT 0,
+  pending_payouts DECIMAL(10,2) DEFAULT 0,
+  platform_fees DECIMAL(10,2) DEFAULT 0,
+  net_earnings DECIMAL(10,2) DEFAULT 0,
+  currency TEXT DEFAULT 'USD',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+
+  UNIQUE(host_id, period_start, period_end, period_type)
+);
+
+-- Indexes for host earnings
+CREATE INDEX idx_host_earnings_host_id ON public.host_earnings_summary(host_id);
+CREATE INDEX idx_host_earnings_period ON public.host_earnings_summary(period_start, period_end);
+CREATE INDEX idx_host_earnings_host_period ON public.host_earnings_summary(host_id, period_type, period_end DESC);
+```
+
+#### 14. Calendar Rules Table
+```sql
+CREATE TYPE calendar_rule_type AS ENUM ('pricing', 'minimum_stay', 'maximum_stay', 'blocked', 'available');
+
+CREATE TABLE public.calendar_rules (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  listing_id UUID REFERENCES public.listings(id) NOT NULL,
+  rule_type calendar_rule_type NOT NULL,
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  value JSONB, -- Flexible storage for rule values (price, min_stay, etc.)
+  is_recurring BOOLEAN DEFAULT FALSE,
+  recurrence_pattern TEXT, -- 'weekly', 'monthly', 'yearly'
+  recurrence_end_date DATE,
+  notes TEXT,
+  created_by UUID REFERENCES public.user_profiles(id) NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+
+  -- Ensure date ranges don't overlap for the same rule type and listing
+  EXCLUDE (listing_id WITH =, rule_type WITH =, daterange(start_date, end_date, '[]') WITH &&)
+  WHERE (is_recurring = FALSE)
+);
+
+-- Indexes for calendar rules
+CREATE INDEX idx_calendar_rules_listing_id ON public.calendar_rules(listing_id);
+CREATE INDEX idx_calendar_rules_dates ON public.calendar_rules(start_date, end_date);
+CREATE INDEX idx_calendar_rules_type ON public.calendar_rules(rule_type);
+CREATE INDEX idx_calendar_rules_listing_type ON public.calendar_rules(listing_id, rule_type);
 ```
 
 ## TypeScript Types Generation
