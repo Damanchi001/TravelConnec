@@ -11,8 +11,11 @@ import { AuthErrorBoundary } from '@/src/components/auth';
 import { AuthProvider, useAuth } from '@/src/lib/auth-provider';
 import { queryClient } from '@/src/lib/react-query';
 import { ThemeProvider as CustomThemeProvider } from '@/src/lib/theme-provider';
+import { NotificationService } from '@/src/services/notifications';
+import { callSignalingService } from '@/src/services/stream/call-signaling';
 import { useAuthStore } from '@/src/stores/auth-store';
 import { getAuthRedirectPath } from '@/src/utils/navigationUtils';
+import * as Notifications from 'expo-notifications';
 
 // Conditionally import Stripe only when not in Expo Go
 let initializeStripe: (() => Promise<void>) | null = null;
@@ -35,6 +38,18 @@ function RootNavigator() {
   const segments = useSegments();
   const { isInitialized } = useAuth();
   const { isAuthenticated, isLoading, user, profile } = useAuthStore();
+
+  // Listen for incoming calls
+  useEffect(() => {
+    if (!isAuthenticated || !user?.id) return;
+
+    const unsubscribe = callSignalingService.onIncomingCall((callData) => {
+      // Navigate to incoming call screen
+      router.push(`/incoming-call?callId=${callData.callId}` as any);
+    });
+
+    return unsubscribe;
+  }, [isAuthenticated, user?.id, router]);
 
   useEffect(() => {
     // Defer navigation logic to ensure navigator is ready
@@ -107,13 +122,13 @@ function RootNavigator() {
     <Stack>
       <Stack.Screen name="splash" options={{ headerShown: false }} />
       <Stack.Screen name="welcome" options={{ headerShown: false }} />
-      <Stack.Screen name="onboarding" options={{ headerShown: false }} />
       <Stack.Screen name="auth" options={{ headerShown: false }} />
+      <Stack.Screen name="profile-setup" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="(host)" options={{ headerShown: false }} />
       <Stack.Screen name="(subscription)" options={{ headerShown: false }} />
-      <Stack.Screen name="booking" options={{ presentation: 'modal' }} />
       <Stack.Screen name="call-logs" />
+      <Stack.Screen name="incoming-call" options={{ headerShown: false, presentation: 'fullScreenModal' }} />
       <Stack.Screen name="(modals)" options={{ presentation: 'modal' }} />
       <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
     </Stack>
@@ -126,6 +141,23 @@ export default function RootLayout() {
     if (initializeStripe) {
       initializeStripe().catch(console.error);
     }
+
+    // Set up push notification listeners
+    const notificationReceivedListener = Notifications.addNotificationReceivedListener(notification => {
+      console.log('[RootLayout] Notification received:', notification);
+      // Handle Stream push notifications
+      NotificationService.handleStreamPushNotification(notification);
+    });
+
+    const notificationResponseListener = Notifications.addNotificationResponseReceivedListener(response => {
+      console.log('[RootLayout] Notification response received:', response);
+      // Handle notification taps if needed
+    });
+
+    return () => {
+      notificationReceivedListener?.remove();
+      notificationResponseListener?.remove();
+    };
   }, []);
 
   return (

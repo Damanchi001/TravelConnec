@@ -73,6 +73,14 @@ The required packages are already installed:
 - Screen sharing
 - Camera switching
 - Call management
+- Push notifications for incoming calls
+
+### Push Notifications
+- Automatic device registration with Stream
+- Push notifications for new chat messages
+- Push notifications for incoming video calls
+- Integration with Expo Notifications
+- In-app notification handling
 
 ## Usage Examples
 
@@ -125,7 +133,7 @@ await videoService.joinCall(callId);
 - Basic error handling
 - Environment setup
 
-🔄 **In Progress:**
+✅ **Completed:**
 - Push notifications for messages/calls
 - Advanced error handling
 - Offline support
@@ -136,9 +144,8 @@ await videoService.joinCall(callId);
 1. **Set up Stream Dashboard**: Configure your apps in Stream dashboard
 2. **Add Environment Variables**: Set up your API keys
 3. **Test Integration**: Verify all services work with real credentials
-4. **Push Notifications**: Implement push notifications for messages and calls
-5. **Offline Support**: Add offline functionality and sync
-6. **Error Handling**: Improve error handling and user feedback
+4. **Offline Support**: Add offline functionality and sync
+5. **Error Handling**: Improve error handling and user feedback
 
 ## Troubleshooting
 

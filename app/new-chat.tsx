@@ -1,83 +1,52 @@
 import {
-    Poppins_400Regular,
-    Poppins_500Medium,
-    Poppins_600SemiBold,
-    useFonts,
+  Poppins_400Regular,
+  Poppins_500Medium,
+  Poppins_600SemiBold,
+  useFonts,
 } from "@expo-google-fonts/poppins";
+import { useQuery } from '@tanstack/react-query';
 import { Image } from "expo-image";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import {
-    ArrowLeft,
-    MessageCircle,
-    Search,
+  ArrowLeft,
+  MessageCircle,
+  Search,
 } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
-    FlatList,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { groupsService } from '../src/services/groups';
+import { useAuthStore } from '../src/stores/auth-store';
 
 interface Contact {
-  id: number;
-  name: string;
-  avatar: string;
-  online: boolean;
-  lastSeen?: string;
+  user_id: string;
+  first_name: string;
+  last_name: string;
+  username: string;
+  avatar_url: string;
+  bio?: string;
+  is_verified: boolean;
+  location?: {
+    city?: string;
+    country?: string;
+  };
 }
-
-// Mock contacts data
-const mockContacts: Contact[] = [
-  {
-    id: 1,
-    name: "Emily Rodriguez",
-    avatar: "https://images.unsplash.com/photo-1494790108755-2616b612b786?w=60&h=60&fit=crop&crop=face",
-    online: true,
-  },
-  {
-    id: 2,
-    name: "Marco Adventures",
-    avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=60&h=60&fit=crop&crop=face",
-    online: true,
-  },
-  {
-    id: 3,
-    name: "Bali Travel Group",
-    avatar: "https://images.unsplash.com/photo-1537953773345-d172ccf13cf1?w=60&h=60&fit=crop",
-    online: false,
-    lastSeen: "2h ago",
-  },
-  {
-    id: 4,
-    name: "Sarah Chen",
-    avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=60&h=60&fit=crop&crop=face",
-    online: false,
-    lastSeen: "1d ago",
-  },
-  {
-    id: 5,
-    name: "European Backpackers",
-    avatar: "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=60&h=60&fit=crop",
-    online: false,
-    lastSeen: "3h ago",
-  },
-  {
-    id: 6,
-    name: "David Kim",
-    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=60&h=60&fit=crop&crop=face",
-    online: false,
-    lastSeen: "5m ago",
-  },
-];
 
 export default function NewChatScreen() {
   const insets = useSafeAreaInsets();
+  const { userId } = useLocalSearchParams<{ userId?: string }>();
   const [searchQuery, setSearchQuery] = useState("");
+  const { profile } = useAuthStore();
 
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
@@ -85,16 +54,92 @@ export default function NewChatScreen() {
     Poppins_600SemiBold,
   });
 
+  // Fetch mutual followers
+  const {
+    data: mutualFollowers,
+    isLoading: followersLoading,
+    error: followersError,
+    refetch: refetchFollowers
+  } = useQuery({
+    queryKey: ['mutual-followers', profile?.id, searchQuery],
+    queryFn: () => groupsService.getMutualFollowers(profile?.id || ''),
+    enabled: !!profile?.id,
+  });
+
+  // Handle direct chat initiation from userId parameter
+  useEffect(() => {
+    if (userId && profile?.id && mutualFollowers) {
+      // Validate that the userId is a mutual follower
+      const targetUser = mutualFollowers.find(follower => follower.user_id === userId);
+
+      if (targetUser) {
+        // Valid mutual follower, navigate to chat
+        router.replace(`/chat?id=${userId}` as any);
+      } else {
+        // Not a mutual follower, show error
+        Alert.alert(
+          'Cannot Start Chat',
+          'You can only start direct messages with mutual followers.',
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
+      }
+    }
+  }, [userId, profile?.id, mutualFollowers]);
+
   if (!fontsLoaded) {
     return null;
   }
 
-  const filteredContacts = mockContacts.filter(contact =>
-    contact.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Show loading if fetching followers
+  if (followersLoading) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <StatusBar style="dark" />
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <ArrowLeft size={24} color="#000" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>New Chat</Text>
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#138AFE" />
+          <Text style={styles.loadingText}>Loading contacts...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  // Show error if fetching failed
+  if (followersError) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <StatusBar style="dark" />
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <ArrowLeft size={24} color="#000" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>New Chat</Text>
+        </View>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>Failed to load contacts</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() => refetchFollowers()}
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  const filteredContacts = mutualFollowers?.filter(contact =>
+    `${contact.first_name} ${contact.last_name}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    contact.username.toLowerCase().includes(searchQuery.toLowerCase())
+  ) || [];
 
   const handleContactPress = (contact: Contact) => {
-    router.push(`/chat?id=${contact.id}` as any);
+    router.push(`/chat?id=${contact.user_id}` as any);
   };
 
   const renderContactItem = ({ item }: { item: Contact }) => (
@@ -105,18 +150,30 @@ export default function NewChatScreen() {
       <View style={styles.contactLeft}>
         <View style={styles.avatarContainer}>
           <Image
-            source={{ uri: item.avatar }}
+            source={{ uri: item.avatar_url }}
             style={styles.avatar}
             contentFit="cover"
           />
-          {item.online && <View style={styles.onlineIndicator} />}
+          {/* Note: Online status would need to be fetched separately */}
         </View>
 
         <View style={styles.contactInfo}>
-          <Text style={styles.contactName}>{item.name}</Text>
-          <Text style={styles.contactStatus}>
-            {item.online ? "Online" : `Last seen ${item.lastSeen}`}
-          </Text>
+          <View style={styles.nameRow}>
+            <Text style={styles.contactName}>
+              {item.first_name} {item.last_name}
+            </Text>
+            {item.is_verified && (
+              <View style={styles.verifiedBadge}>
+                <Text style={styles.verifiedCheck}>✓</Text>
+              </View>
+            )}
+          </View>
+          <Text style={styles.contactUsername}>@{item.username}</Text>
+          {item.bio && (
+            <Text style={styles.contactBio} numberOfLines={1}>
+              {item.bio}
+            </Text>
+          )}
         </View>
       </View>
 
@@ -156,12 +213,13 @@ export default function NewChatScreen() {
       <FlatList
         data={filteredContacts}
         renderItem={renderContactItem}
-        keyExtractor={(item) => item.id.toString()}
+        keyExtractor={(item) => item.user_id}
         contentContainerStyle={[
           styles.contactsList,
           { paddingBottom: insets.bottom + 20 }
         ]}
         showsVerticalScrollIndicator={false}
+        keyboardDismissMode="on-drag"
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <MessageCircle size={48} color="#E5E7EB" />
@@ -278,6 +336,69 @@ const styles = StyleSheet.create({
     backgroundColor: "#F3F4F6",
     justifyContent: "center",
     alignItems: "center",
+  },
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 2,
+  },
+  verifiedBadge: {
+    backgroundColor: "rgba(19, 138, 254, 0.1)",
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    marginLeft: 6,
+  },
+  verifiedCheck: {
+    fontSize: 10,
+    color: "#138AFE",
+    fontWeight: "bold",
+  },
+  contactUsername: {
+    fontFamily: "Poppins_400Regular",
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 2,
+  },
+  contactBio: {
+    fontFamily: "Poppins_400Regular",
+    fontSize: 13,
+    color: "#888",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    fontFamily: "Poppins_400Regular",
+    fontSize: 16,
+    color: "#666",
+    marginTop: 16,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 40,
+  },
+  errorText: {
+    fontFamily: "Poppins_400Regular",
+    fontSize: 16,
+    color: "#000",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  retryButton: {
+    backgroundColor: "#138AFE",
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: "#FFF",
+    fontSize: 16,
+    fontWeight: "500",
   },
   emptyState: {
     alignItems: "center",

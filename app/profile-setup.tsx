@@ -3,7 +3,6 @@ import {
   Poppins_600SemiBold,
   useFonts,
 } from "@expo-google-fonts/poppins";
-import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -20,7 +19,7 @@ import {
   View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { supabase } from "../src/services/supabase/client";
+import { ImagePickerComponent } from "../src/components/forms";
 import { useAuthStore } from "../src/stores/auth-store";
 
 type ProfileData = {
@@ -44,15 +43,15 @@ const bucketListDestinations = [
 
 export default function ProfileSetupScreen() {
   const insets = useSafeAreaInsets();
-  const { updateProfile } = useAuthStore();
+  const { updateProfile, profile } = useAuthStore();
   const [step, setStep] = useState(1);
   const [profileData, setProfileData] = useState<ProfileData>({
-    name: "",
-    bio: "",
-    profilePicture: undefined,
-    countriesVisited: [],
-    bucketList: [],
-    interests: []
+    name: profile ? `${profile.first_name} ${profile.last_name}`.trim() : "",
+    bio: profile?.bio || "",
+    profilePicture: profile?.avatar_url || undefined,
+    countriesVisited: profile?.preferences?.countriesVisited || [],
+    bucketList: profile?.preferences?.bucketList || [],
+    interests: profile?.preferences?.interests || []
   });
 
   const [fontsLoaded] = useFonts({
@@ -111,8 +110,18 @@ export default function ProfileSetupScreen() {
         return;
       }
 
-      // Navigate to main app
-      router.replace("/(tabs)" as any);
+      // Navigate based on user status
+      const userCreatedAt = new Date(profile?.created_at || '');
+      const now = new Date();
+      const daysSinceCreation = (now.getTime() - userCreatedAt.getTime()) / (1000 * 60 * 60 * 24);
+
+      if (daysSinceCreation < 1) {
+        // New user - show subscription plans
+        router.replace("/(subscription)/plans" as any);
+      } else {
+        // Existing user - go to main app
+        router.replace("/(tabs)" as any);
+      }
     } catch (error) {
       Alert.alert("Error", "Failed to save profile data");
     }
@@ -127,92 +136,6 @@ export default function ProfileSetupScreen() {
     }));
   };
 
-  const pickImage = async () => {
-    try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permissionResult.granted) {
-        Alert.alert('Permission needed', 'Please grant permission to access your photos');
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        const asset = result.assets[0];
-        // Upload to Supabase and get URL
-        const fileName = `profile-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-        const filePath = `profiles/${fileName}`;
-
-        const response = await fetch(asset.uri);
-        const blob = await response.blob();
-
-        const { data, error } = await supabase.storage
-          .from('profiles')
-          .upload(filePath, blob, {
-            contentType: 'image/jpeg',
-          });
-
-        if (error) throw error;
-
-        const { data: { publicUrl } } = supabase.storage
-          .from('profiles')
-          .getPublicUrl(filePath);
-
-        setProfileData(prev => ({ ...prev, profilePicture: publicUrl }));
-      }
-    } catch (error) {
-      console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to pick image');
-    }
-  };
-
-  const takePhoto = async () => {
-    try {
-      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permissionResult.granted) {
-        Alert.alert('Permission needed', 'Please grant permission to access your camera');
-        return;
-      }
-
-      const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        const asset = result.assets[0];
-        // Upload to Supabase and get URL
-        const fileName = `profile-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-        const filePath = `profiles/${fileName}`;
-
-        const response = await fetch(asset.uri);
-        const blob = await response.blob();
-
-        const { data, error } = await supabase.storage
-          .from('profiles')
-          .upload(filePath, blob, {
-            contentType: 'image/jpeg',
-          });
-
-        if (error) throw error;
-
-        const { data: { publicUrl } } = supabase.storage
-          .from('profiles')
-          .getPublicUrl(filePath);
-
-        setProfileData(prev => ({ ...prev, profilePicture: publicUrl }));
-      }
-    } catch (error) {
-      console.error('Error taking photo:', error);
-      Alert.alert('Error', 'Failed to take photo');
-    }
-  };
 
   const renderStep = () => {
     switch (step) {
@@ -240,21 +163,25 @@ export default function ProfileSetupScreen() {
 
             {/* Profile Picture */}
             <View style={styles.profilePictureContainer}>
-              <TouchableOpacity style={styles.profileImageContainer} onPress={pickImage}>
-                {profileData.profilePicture ? (
-                  <Image source={{ uri: profileData.profilePicture }} style={styles.profileImage} />
-                ) : (
-                  <View style={styles.profileImagePlaceholder}>
-                    <User size={40} color="#666" />
+              <ImagePickerComponent
+                onImageSelected={(uri) => setProfileData(prev => ({ ...prev, profilePicture: uri }))}
+                aspect={[1, 1]}
+                quality={0.8}
+                storageBucket="profiles"
+              >
+                <View style={styles.profileImageContainer}>
+                  {profileData.profilePicture ? (
+                    <Image source={{ uri: profileData.profilePicture }} style={styles.profileImage} />
+                  ) : (
+                    <View style={styles.profileImagePlaceholder}>
+                      <User size={40} color="#666" />
+                    </View>
+                  )}
+                  <View style={styles.cameraButton}>
+                    <Text style={styles.cameraIcon}>📷</Text>
                   </View>
-                )}
-                <View style={styles.cameraButton}>
-                  <Text style={styles.cameraIcon}>📷</Text>
                 </View>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.takePhotoButton} onPress={takePhoto}>
-                <Text style={styles.takePhotoText}>Take Photo</Text>
-              </TouchableOpacity>
+              </ImagePickerComponent>
               <Text style={styles.profilePictureHint}>Tap to select from gallery or take a photo</Text>
             </View>
 
@@ -417,6 +344,7 @@ export default function ProfileSetupScreen() {
           { paddingBottom: insets.bottom + 40 }
         ]}
         showsVerticalScrollIndicator={false}
+        keyboardDismissMode="on-drag"
       >
         {renderStep()}
 

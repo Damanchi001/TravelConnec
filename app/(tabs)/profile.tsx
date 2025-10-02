@@ -132,11 +132,11 @@ export default function ProfileScreen() {
   };
 
   const handleFollowersPress = () => {
-    console.log("Followers pressed");
+    router.push('/followers-following?initialTab=followers' as any);
   };
 
   const handleFollowingPress = () => {
-    console.log("Following pressed");
+    router.push('/followers-following?initialTab=following' as any);
   };
 
   const handleTripPress = (trip: any) => {

@@ -28,11 +28,16 @@ export function getAuthRedirectPath(
     return '/onboarding/1';
   }
 
+  // User has profile but onboarding not complete - needs profile setup
+  if (!hasCompletedOnboarding(profile)) {
+    return '/profile-setup';
+  }
+
   // Check if user is new (created recently) - might need subscription
   const userCreatedAt = new Date(user.created_at);
   const now = new Date();
   const daysSinceCreation = (now.getTime() - userCreatedAt.getTime()) / (1000 * 60 * 60 * 24);
-  
+
   // If user is new (less than 1 day old) and hasn't seen subscription plans
   if (daysSinceCreation < 1) {
     // You could check a flag in profile to see if they've completed subscription flow
@@ -49,13 +54,18 @@ export function getAuthRedirectPath(
  */
 export function hasCompletedOnboarding(profile: UserProfile | null): boolean {
   if (!profile) return false;
-  
+
   // Check if required onboarding fields are filled
-  return !!(
+  const hasBasicInfo = !!(
     profile.first_name &&
     profile.last_name &&
     profile.user_type
   );
+
+  // Check if profile setup is complete (has preferences from profile-setup screen)
+  const hasProfileSetup = !!profile.preferences;
+
+  return hasBasicInfo && hasProfileSetup;
 }
 
 /**

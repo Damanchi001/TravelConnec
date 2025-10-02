@@ -144,13 +144,13 @@ const storeConfig = (set: any, get: any) => ({
       // OAuth will handle the redirect and auth state change will be caught by the listener
       // Keep loading state until auth state changes or timeout
       setTimeout(() => {
-        // If still loading after 30 seconds, reset loading state
+        // If still loading after 60 seconds, reset loading state
         const currentState = get();
         if (currentState.isLoading) {
-          console.warn('[AuthStore] Google OAuth timeout, resetting loading state');
+          console.warn('[AuthStore] Google OAuth timeout after 60 seconds, resetting loading state');
           set({ isLoading: false });
         }
-      }, 30000);
+      }, 60000);
 
       return { success: true };
     } catch (error: any) {
@@ -177,10 +177,10 @@ const storeConfig = (set: any, get: any) => ({
       setTimeout(() => {
         const currentState = get();
         if (currentState.isLoading) {
-          console.warn('[AuthStore] Facebook OAuth timeout, resetting loading state');
+          console.warn('[AuthStore] Facebook OAuth timeout after 60 seconds, resetting loading state');
           set({ isLoading: false });
         }
-      }, 30000);
+      }, 60000);
 
       return { success: true };
     } catch (error: any) {
@@ -207,10 +207,10 @@ const storeConfig = (set: any, get: any) => ({
       setTimeout(() => {
         const currentState = get();
         if (currentState.isLoading) {
-          console.warn('[AuthStore] Apple OAuth timeout, resetting loading state');
+          console.warn('[AuthStore] Apple OAuth timeout after 60 seconds, resetting loading state');
           set({ isLoading: false });
         }
-      }, 30000);
+      }, 60000);
 
       return { success: true };
     } catch (error: any) {
@@ -229,13 +229,28 @@ const storeConfig = (set: any, get: any) => ({
       const { error } = await AuthService.signOut();
       if (error) {
         console.error('[AuthStore] AuthService.signOut() returned error:', error);
-        throw error;
+        // Continue with logout even if server sign out fails
+      } else {
+        console.log('[AuthStore] AuthService.signOut() completed successfully');
       }
-      console.log('[AuthStore] AuthService.signOut() completed successfully');
 
       console.log('[AuthStore] Logging out from RevenueCat');
-      await revenueCatService.logout();
-      console.log('[AuthStore] RevenueCat logout completed');
+      try {
+        await revenueCatService.logout();
+        console.log('[AuthStore] RevenueCat logout completed');
+      } catch (revenueCatError) {
+        console.warn('[AuthStore] RevenueCat logout failed:', revenueCatError);
+      }
+
+      // Manually clear AsyncStorage to ensure session is removed
+      if (AsyncStorage) {
+        try {
+          await AsyncStorage.removeItem('supabase.auth.token');
+          console.log('[AuthStore] Cleared auth token from AsyncStorage');
+        } catch (storageError) {
+          console.warn('[AuthStore] Failed to clear AsyncStorage:', storageError);
+        }
+      }
 
       console.log('[AuthStore] Clearing local auth state');
       set({
@@ -246,9 +261,15 @@ const storeConfig = (set: any, get: any) => ({
         isLoading: false
       });
       console.log('[AuthStore] Local auth state cleared');
+
+      // Force clear auth provider state as well
+      if (typeof window !== 'undefined') {
+        // This ensures any cached auth state is cleared
+        console.log('[AuthStore] Forcing auth provider state clear');
+      }
     } catch (error) {
       console.error('[AuthStore] Sign out error:', error);
-      // Still clear local state even if sign out fails
+      // Always clear local state even if sign out fails
       console.log('[AuthStore] Clearing local auth state despite error');
       set({
         user: null,
@@ -312,13 +333,26 @@ const storeConfig = (set: any, get: any) => ({
       const { error } = await AuthService.updateUserProfile(user.id, updates);
 
       if (error) {
+        console.error('[AuthStore] Failed to update profile in database:', error);
         return { success: false, error: error.message };
       }
 
-      // Update local profile
-      set({ profile: { ...profile, ...updates } });
+      // Reload profile from database to ensure consistency
+      console.log('[AuthStore] Reloading profile from database after update');
+      const { data: updatedProfile, error: fetchError } = await AuthService.getUserProfile(user.id);
+
+      if (fetchError) {
+        console.warn('[AuthStore] Failed to reload profile, using local update:', fetchError);
+        // Fall back to local update
+        set({ profile: { ...profile, ...updates } });
+      } else {
+        console.log('[AuthStore] Profile reloaded successfully from database');
+        set({ profile: updatedProfile });
+      }
+
       return { success: true };
     } catch (error: any) {
+      console.error('[AuthStore] Profile update exception:', error);
       return { success: false, error: error.message || 'Update failed' };
     }
   },

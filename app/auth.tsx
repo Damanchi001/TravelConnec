@@ -10,12 +10,13 @@ import {
   Alert,
   Dimensions,
   KeyboardAvoidingView,
-  SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const { width, height } = Dimensions.get('window');
 
@@ -233,7 +234,7 @@ export default function AuthScreen() {
   const renderAuthForm = () => {
     if (authMode === 'login') {
       return (
-        <View style={styles.formContainer}>
+        <ScrollView style={styles.formContainer} keyboardDismissMode="on-drag">
           <TouchableOpacity style={styles.backButton} onPress={handleBackToSocial}>
             <Text style={styles.backButtonText}>← Back</Text>
           </TouchableOpacity>
@@ -242,11 +243,11 @@ export default function AuthScreen() {
             onSwitchToSignup={handleSwitchToSignup}
             onForgotPassword={handleForgotPassword}
           />
-        </View>
+        </ScrollView>
       );
     } else if (authMode === 'signup') {
       return (
-        <View style={styles.formContainer}>
+        <ScrollView style={styles.formContainer} keyboardDismissMode="on-drag">
           <TouchableOpacity style={styles.backButton} onPress={handleBackToSocial}>
             <Text style={styles.backButtonText}>← Back</Text>
           </TouchableOpacity>
@@ -254,7 +255,7 @@ export default function AuthScreen() {
             onSuccess={handleSignupSuccess}
             onSwitchToLogin={handleSwitchToLogin}
           />
-        </View>
+        </ScrollView>
       );
     }
     return null;

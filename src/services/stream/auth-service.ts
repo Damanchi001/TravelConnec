@@ -1,3 +1,4 @@
+import { NotificationService } from '../notifications';
 import { supabase } from '../supabase/client';
 import { chatClient, feedsClient, videoClient } from './clients';
 
@@ -52,6 +53,15 @@ export class StreamAuthService {
           token: tokens.feedsToken,
         });
         this.feedsToken = tokens.feedsToken;
+      }
+
+      // Register push notifications with Stream services
+      try {
+        await NotificationService.registerPushTokenWithStream(userId);
+        console.log('[StreamAuthService] Push notifications registered with Stream');
+      } catch (pushError) {
+        console.warn('[StreamAuthService] Failed to register push notifications:', pushError);
+        // Don't fail the connection if push registration fails
       }
 
       console.log('[StreamAuthService] All Stream services connected successfully');

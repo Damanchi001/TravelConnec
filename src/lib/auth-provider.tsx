@@ -75,6 +75,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
               // Connect to Stream services
               console.log('[AuthProvider] About to connect to Stream services for user:', session.user.id);
               try {
+                // Ensure user ID is valid before connecting
+                if (!session.user.id) {
+                  console.warn('[AuthProvider] User ID is missing, skipping Stream connection');
+                  return;
+                }
+
+                // Disconnect any existing connection first
+                if (streamAuthService.isConnected()) {
+                  console.log('[AuthProvider] Disconnecting existing Stream connection before reconnecting');
+                  await streamAuthService.disconnectUser();
+                }
+
                 const streamResult = await streamAuthService.connectUser(session.user.id);
                 if (streamResult.success) {
                   console.log('[AuthProvider] Stream services connected successfully');
@@ -123,7 +135,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    // Return default value instead of throwing to prevent render errors
+    return { isInitialized: false };
   }
   return context;
 }

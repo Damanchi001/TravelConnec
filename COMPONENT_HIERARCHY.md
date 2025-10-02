@@ -97,13 +97,19 @@ interface LocationPickerProps {
   radius?: number;
 }
 
-// src/components/forms/image-picker.tsx
+// src/components/forms/image-picker.tsx ✅ IMPLEMENTED
 interface ImagePickerProps {
-  value: string[];
-  onChange: (images: string[]) => void;
-  maxImages?: number;
-  aspectRatio?: number;
+  onImageSelected?: (uri: string) => void;
+  onMultipleImagesSelected?: (uris: string[]) => void;
+  children: React.ReactNode;
+  aspect?: [number, number];
+  allowsMultipleSelection?: boolean;
   quality?: number;
+  storageBucket: string;
+  storagePath?: string;
+  disabled?: boolean;
+  style?: any;
+  source?: 'library' | 'camera' | 'both';
 }
 ```
 
@@ -396,6 +402,12 @@ src/components/
 │   ├── image-picker.tsx
 │   ├── rating-input.tsx
 │   └── validation-message.tsx
+│
+├── explore/                      # Explore & discovery components
+│   ├── city-card.tsx
+│   ├── country-card.tsx
+│   ├── category-item-card.tsx
+│   └── search-bar.tsx
 │
 ├── layout/                       # Layout & navigation
 │   ├── screen-wrapper.tsx

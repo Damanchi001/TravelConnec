@@ -2,7 +2,6 @@ import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import React, { useRef, useState } from 'react';
 import {
@@ -21,6 +20,7 @@ import { feedsService } from '../../services/stream';
 import { supabase } from '../../services/supabase/client';
 import { useAuthStore } from '../../stores/auth-store';
 import { LocationData, MediaAttachment, PostComposerProps, PostContent } from '../../types';
+import { ImagePickerComponent } from '../forms';
 
 export const PostComposer: React.FC<PostComposerProps> = ({
   onPost,
@@ -52,70 +52,16 @@ export const PostComposer: React.FC<PostComposerProps> = ({
     }
   };
 
-  const pickImage = async () => {
-    if (!allowMedia) return;
-
-    try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permissionResult.granted) {
-        Alert.alert('Permission needed', 'Please grant permission to access your photos');
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        const asset = result.assets[0];
-        const attachment: MediaAttachment = {
-          uri: asset.uri,
-          type: 'image',
-          fileName: asset.fileName || undefined,
-          fileSize: asset.fileSize,
-        };
-        setMediaAttachments(prev => [...prev, attachment]);
-      }
-    } catch (error) {
-      console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to pick image');
-    }
+  const addMediaAttachment = (uri: string) => {
+    const attachment: MediaAttachment = {
+      uri,
+      type: 'image',
+      fileName: undefined,
+      fileSize: undefined,
+    };
+    setMediaAttachments(prev => [...prev, attachment]);
   };
 
-  const takePhoto = async () => {
-    if (!allowMedia) return;
-
-    try {
-      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permissionResult.granted) {
-        Alert.alert('Permission needed', 'Please grant permission to access your camera');
-        return;
-      }
-
-      const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        const asset = result.assets[0];
-        const attachment: MediaAttachment = {
-          uri: asset.uri,
-          type: 'image',
-          fileName: asset.fileName || undefined,
-          fileSize: asset.fileSize,
-        };
-        setMediaAttachments(prev => [...prev, attachment]);
-      }
-    } catch (error) {
-      console.error('Error taking photo:', error);
-      Alert.alert('Error', 'Failed to take photo');
-    }
-  };
 
   const addLocation = async () => {
     if (!allowLocation) return;
@@ -266,21 +212,21 @@ export const PostComposer: React.FC<PostComposerProps> = ({
       <View style={styles.header}>
         <ThemedText style={styles.headerText}>Share your travel experience</ThemedText>
       </View>
-      <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false} keyboardDismissMode="on-drag">
         {/* Text Input */}
         <View style={styles.inputContainer}>
           <TextInput
             ref={textInputRef}
             style={[styles.textInput, { color: colors.text }]}
             placeholder={placeholder}
-            placeholderTextColor={colors.text + '80'}
+            placeholderTextColor="#138AFE"
             value={content}
             onChangeText={handleTextChange}
             multiline
             maxLength={maxLength}
             autoFocus
           />
-          <ThemedText style={styles.charCount}>
+          <ThemedText style={[styles.charCount, { color: '#138AFE' }]}>
             {content.length}/{maxLength}
           </ThemedText>
         </View>
@@ -317,14 +263,30 @@ export const PostComposer: React.FC<PostComposerProps> = ({
         <View style={styles.actionsContainer}>
           {allowMedia && (
             <View style={styles.mediaButtons}>
-              <TouchableOpacity style={styles.actionButton} onPress={pickImage}>
-                <IconSymbol name="photo" size={20} color={colors.text} />
-                <ThemedText style={styles.actionText}>Photo</ThemedText>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.actionButton} onPress={takePhoto}>
-                <IconSymbol name="camera" size={20} color={colors.text} />
-                <ThemedText style={styles.actionText}>Camera</ThemedText>
-              </TouchableOpacity>
+              <ImagePickerComponent
+                onImageSelected={addMediaAttachment}
+                aspect={[4, 3]}
+                quality={0.8}
+                storageBucket="posts"
+                source="library"
+              >
+                <View style={styles.actionButton}>
+                  <IconSymbol name="photo" size={20} color={colors.text} />
+                  <ThemedText style={styles.actionText}>Photo</ThemedText>
+                </View>
+              </ImagePickerComponent>
+              <ImagePickerComponent
+                onImageSelected={addMediaAttachment}
+                aspect={[4, 3]}
+                quality={0.8}
+                storageBucket="posts"
+                source="camera"
+              >
+                <View style={styles.actionButton}>
+                  <IconSymbol name="camera" size={20} color={colors.text} />
+                  <ThemedText style={styles.actionText}>Camera</ThemedText>
+                </View>
+              </ImagePickerComponent>
             </View>
           )}
 
@@ -444,7 +406,7 @@ const styles = StyleSheet.create({
   actionText: {
     marginLeft: 8,
     fontSize: 14,
-    color: '#666',
+    color: '#138AFE',
   },
   footer: {
     padding: 16,

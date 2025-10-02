@@ -5,18 +5,19 @@ import {
   Poppins_600SemiBold,
   useFonts,
 } from "@expo-google-fonts/poppins";
-import { Image } from "expo-image";
+import {
+  Call,
+  CallContent,
+  StreamCall,
+  useStreamVideoClient
+} from '@stream-io/video-react-native-sdk';
 import { router, useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import {
   Camera,
-  CameraOff,
   Mic,
-  MicOff,
   PhoneOff,
   RotateCcw,
-  Volume2,
-  VolumeX,
 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
@@ -24,36 +25,28 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-// Conditionally import video service only when available
-let videoService: any = null;
-try {
-  const videoModule = require('../../../src/services/stream/video-service');
-  videoService = videoModule.videoService;
-} catch (error) {
-  console.warn('Video service not available, using mock implementation');
-  // Mock video service for Expo Go compatibility
-  videoService = {
-    joinCall: async () => ({ id: 'mock-call' }),
-    leaveCall: async () => {},
-    toggleAudio: async () => {},
-    toggleVideo: async () => {},
-    switchCamera: async () => {},
-  };
-}
+import { callQualityMonitor } from '../../../src/services/stream/call-quality-monitor';
+import { callSignalingService } from '../../../src/services/stream/call-signaling';
+import { videoService } from '../../../src/services/stream/video-service';
+import { useAuthStore } from '../../../src/stores/auth-store';
 
 export default function VideoCallScreen() {
   const insets = useSafeAreaInsets();
   const { callId } = useLocalSearchParams();
   const { currentCall, updateCurrentCall } = useMessageStore();
+  const { profile: currentUser } = useAuthStore();
+  const videoClient = useStreamVideoClient();
 
+  const [call, setCall] = useState<Call | null>(null);
+  const [callData, setCallData] = useState<any>(null);
+  const [callDuration, setCallDuration] = useState(0);
+  const [isConnected, setIsConnected] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(true);
   const [isSpeakerOn, setIsSpeakerOn] = useState(false);
-  const [callDuration, setCallDuration] = useState(0);
-  const [call, setCall] = useState<any>(null);
 
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
@@ -61,39 +54,68 @@ export default function VideoCallScreen() {
     Poppins_600SemiBold,
   });
 
-  // Mock call data - in real app this would come from the callId
-  const callData = {
-    id: callId as string,
-    participantName: "Emily Rodriguez",
-    participantAvatar: "https://images.unsplash.com/photo-1494790108755-2616b612b786?w=200&h=200&fit=crop&crop=face",
-    type: "video" as const,
-    direction: "outgoing" as const,
-    status: "connected" as const,
-  };
-
   useEffect(() => {
     const initializeCall = async () => {
       try {
-        // Join the call using Stream Video service
-        const activeCall = await videoService.joinCall(callData.id);
-        setCall(activeCall);
+        if (!videoClient || !currentUser?.id || !callId) {
+          console.error('Missing required data for call initialization');
+          router.back();
+          return;
+        }
 
-        if (!currentCall) {
-          // Initialize call session
-          updateCurrentCall({
-            id: callData.id,
-            type: callData.type,
-            status: callData.status,
-            direction: callData.direction,
-            participantId: "participant-id",
-            participantName: callData.participantName,
-            participantAvatar: callData.participantAvatar,
-            startTime: new Date(),
+        // Get call data from signaling service
+        const activeCall = callSignalingService.getActiveCall(currentUser.id);
+        if (activeCall && activeCall.id === callId) {
+          setCallData(activeCall);
+
+          // Create Stream call instance
+          const streamCall = videoClient.call('default', callId as string);
+
+          // Get or create the call
+          await streamCall.getOrCreate({
+            data: {
+              members: [
+                { user_id: activeCall.callerId },
+                { user_id: activeCall.calleeId }
+              ],
+              settings_override: {
+                audio: { default_device: 'speaker' },
+                video: { camera_default_on: true },
+              },
+            },
           });
+
+          setCall(streamCall);
+
+          // Join the call
+          await streamCall.join();
+          setIsConnected(true);
+
+          // Start quality monitoring
+          callQualityMonitor.startMonitoring(callId as string, streamCall);
+
+          if (!currentCall) {
+            // Initialize call session
+            updateCurrentCall({
+              id: activeCall.id,
+              type: activeCall.type,
+              status: 'connected',
+              direction: activeCall.callerId === currentUser.id ? 'outgoing' : 'incoming',
+              participantId: activeCall.callerId === currentUser.id ? activeCall.calleeId : activeCall.callerId,
+              participantName: 'Participant', // Would be fetched from profile
+              participantAvatar: undefined,
+              startTime: activeCall.startTime || new Date(),
+            });
+          }
+        } else {
+          console.error('Call not found or not active');
+          router.back();
+          return;
         }
       } catch (error) {
-        console.error('Failed to join call:', error);
-        // Handle error - maybe navigate back or show error
+        console.error('Failed to initialize call:', error);
+        Alert.alert('Call Error', 'Failed to connect to the call. Please try again.');
+        router.back();
       }
     };
 
@@ -104,8 +126,11 @@ export default function VideoCallScreen() {
       setCallDuration(prev => prev + 1);
     }, 1000);
 
-    return () => clearInterval(timer);
-  }, [currentCall, updateCurrentCall, callData.id, callData.type, callData.status, callData.direction, callData.participantName, callData.participantAvatar]);
+    return () => {
+      clearInterval(timer);
+      // Cleanup will be handled in handleEndCall
+    };
+  }, [currentUser?.id, callId, videoClient, currentCall, updateCurrentCall]);
 
   if (!fontsLoaded) {
     return null;
@@ -128,9 +153,11 @@ export default function VideoCallScreen() {
           style: "destructive",
           onPress: async () => {
             try {
-              await videoService.leaveCall(callData.id);
+              if (callData?.id) {
+                await callSignalingService.endCall(callData.id, 'ended');
+              }
             } catch (error) {
-              console.error('Failed to leave call:', error);
+              console.error('Failed to end call:', error);
             }
             updateCurrentCall({
               status: 'ended',
@@ -145,25 +172,15 @@ export default function VideoCallScreen() {
   };
 
   const handleMuteToggle = async () => {
-    if (call) {
-      try {
-        await videoService.toggleAudio(callData.id);
-        setIsMuted(!isMuted);
-      } catch (error) {
-        console.error('Failed to toggle audio:', error);
-      }
-    }
+    // For now, just toggle local state
+    // In a full implementation, this would control actual audio
+    setIsMuted(!isMuted);
   };
 
   const handleCameraToggle = async () => {
-    if (call) {
-      try {
-        await videoService.toggleVideo(callData.id);
-        setIsCameraOn(!isCameraOn);
-      } catch (error) {
-        console.error('Failed to toggle video:', error);
-      }
-    }
+    // For now, just toggle local state
+    // In a full implementation, this would control actual video
+    setIsCameraOn(!isCameraOn);
   };
 
   const handleSpeakerToggle = () => {
@@ -172,116 +189,41 @@ export default function VideoCallScreen() {
   };
 
   const handleSwitchCamera = async () => {
-    if (call) {
-      try {
-        await videoService.switchCamera(callData.id);
-      } catch (error) {
-        console.error('Failed to switch camera:', error);
-      }
-    }
+    // For now, just log the action
+    // In a full implementation, this would switch camera
+    console.log('Switching camera');
   };
 
-  return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar style="light" />
+  if (!call || !isConnected) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <StatusBar style="light" />
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>
+            {call ? 'Connecting...' : 'Initializing call...'}
+          </Text>
+        </View>
+      </View>
+    );
+  }
 
-      {/* Remote Video (Main) */}
-      <View style={styles.remoteVideoContainer}>
-        <Image
-          source={{ uri: callData.participantAvatar }}
-          style={styles.remoteVideo}
-          contentFit="cover"
-        />
-        <View style={styles.remoteVideoOverlay}>
+  return (
+    <StreamCall call={call}>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <StatusBar style="light" />
+
+        {/* Stream Call Content */}
+        <CallContent />
+
+        {/* Custom Controls */}
+        <CustomCallControls callId={callId as string} onEndCall={handleEndCall} />
+
+        {/* Call Duration Overlay */}
+        <View style={styles.callDurationOverlay}>
           <Text style={styles.callDuration}>{formatDuration(callDuration)}</Text>
         </View>
       </View>
-
-      {/* Local Video (Small) */}
-      <View style={styles.localVideoContainer}>
-        {isCameraOn ? (
-          <Image
-            source={{ uri: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop&crop=face" }}
-            style={styles.localVideo}
-            contentFit="cover"
-          />
-        ) : (
-          <View style={styles.localVideoPlaceholder}>
-            <CameraOff size={24} color="#666" />
-          </View>
-        )}
-      </View>
-
-      {/* Participant Info */}
-      <View style={styles.participantInfo}>
-        <Text style={styles.participantName}>{callData.participantName}</Text>
-        <Text style={styles.callType}>
-          {callData.direction === 'outgoing' ? 'Outgoing video call' : 'Incoming video call'}
-        </Text>
-      </View>
-
-      {/* Call Controls */}
-      <View style={[styles.controls, { paddingBottom: insets.bottom + 40 }]}>
-        <View style={styles.controlButtons}>
-          <TouchableOpacity
-            style={[styles.controlButton, isMuted && styles.controlButtonActive]}
-            onPress={handleMuteToggle}
-          >
-            {isMuted ? (
-              <MicOff size={24} color="#FFF" />
-            ) : (
-              <Mic size={24} color="#FFF" />
-            )}
-            <Text style={styles.controlButtonText}>
-              {isMuted ? 'Unmute' : 'Mute'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.controlButton, !isCameraOn && styles.controlButtonActive]}
-            onPress={handleCameraToggle}
-          >
-            {isCameraOn ? (
-              <Camera size={24} color="#FFF" />
-            ) : (
-              <CameraOff size={24} color="#FFF" />
-            )}
-            <Text style={styles.controlButtonText}>
-              {isCameraOn ? 'Turn Off' : 'Turn On'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.controlButton, isSpeakerOn && styles.controlButtonActive]}
-            onPress={handleSpeakerToggle}
-          >
-            {isSpeakerOn ? (
-              <VolumeX size={24} color="#FFF" />
-            ) : (
-              <Volume2 size={24} color="#FFF" />
-            )}
-            <Text style={styles.controlButtonText}>Speaker</Text>
-          </TouchableOpacity>
-
-          {isCameraOn && (
-            <TouchableOpacity
-              style={styles.controlButton}
-              onPress={handleSwitchCamera}
-            >
-              <RotateCcw size={24} color="#FFF" />
-              <Text style={styles.controlButtonText}>Switch</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        <TouchableOpacity
-          style={styles.endCallButton}
-          onPress={handleEndCall}
-        >
-          <PhoneOff size={28} color="#FFF" />
-        </TouchableOpacity>
-      </View>
-    </View>
+    </StreamCall>
   );
 }
 
@@ -398,4 +340,61 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#000',
+  },
+  loadingText: {
+    fontFamily: "Poppins_500Medium",
+    fontSize: 18,
+    color: "#FFF",
+  },
+  callDurationOverlay: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    right: 20,
+    alignItems: 'center',
+  },
 });
+
+// Custom Call Controls Component
+const CustomCallControls: React.FC<{ callId: string; onEndCall: () => void }> = ({ callId, onEndCall }) => {
+  const insets = useSafeAreaInsets();
+
+  return (
+    <View style={[styles.controls, { paddingBottom: insets.bottom + 40 }]}>
+      <View style={styles.controlButtons}>
+        <TouchableOpacity
+          style={styles.controlButton}
+          onPress={() => videoService.toggleAudio(callId)}
+        >
+          <Mic size={24} color="#FFF" />
+          <Text style={styles.controlButtonText}>Mute</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.controlButton}
+          onPress={() => videoService.toggleVideo(callId)}
+        >
+          <Camera size={24} color="#FFF" />
+          <Text style={styles.controlButtonText}>Camera</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.controlButton}
+          onPress={() => videoService.switchCamera(callId)}
+        >
+          <RotateCcw size={24} color="#FFF" />
+          <Text style={styles.controlButtonText}>Switch</Text>
+        </TouchableOpacity>
+      </View>
+
+      <TouchableOpacity style={styles.endCallButton} onPress={onEndCall}>
+        <PhoneOff size={28} color="#FFF" />
+      </TouchableOpacity>
+    </View>
+  );
+};

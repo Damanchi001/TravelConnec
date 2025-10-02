@@ -1,6 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { useNotificationStore } from '../../stores/notification-store';
 import { AppNotification, NotificationType, PushNotificationData } from '../../types/notifications';
+import { chatClient, videoClient } from '../stream/clients';
 
 // Configure notification handler
 Notifications.setNotificationHandler({
@@ -28,6 +29,57 @@ export class NotificationService {
     } catch (error) {
       console.error('Error requesting notification permissions:', error);
       return false;
+    }
+  }
+
+  /**
+   * Register push token with Stream services for push notifications
+   */
+  static async registerPushTokenWithStream(userId: string): Promise<void> {
+    try {
+      const token = await Notifications.getDevicePushTokenAsync();
+      console.log('[NotificationService] Got device push token:', token.data.substring(0, 20) + '...');
+
+      // Use firebase as provider (works for both iOS and Android with Expo)
+      const provider = 'firebase';
+
+      // Register with Stream Chat
+      if (chatClient) {
+        await chatClient.addDevice(token.data, provider as any);
+        console.log('[NotificationService] Registered push token with Stream Chat');
+      }
+
+      // Register with Stream Video
+      if (videoClient) {
+        await videoClient.addDevice(token.data, provider as any);
+        console.log('[NotificationService] Registered push token with Stream Video');
+      }
+    } catch (error) {
+      console.error('[NotificationService] Error registering push token with Stream:', error);
+    }
+  }
+
+  /**
+   * Unregister push token from Stream services
+   */
+  static async unregisterPushTokenFromStream(): Promise<void> {
+    try {
+      // Get the current token to remove
+      const token = await Notifications.getDevicePushTokenAsync();
+
+      // Unregister from Stream Chat
+      if (chatClient) {
+        await chatClient.removeDevice(token.data);
+        console.log('[NotificationService] Unregistered push token from Stream Chat');
+      }
+
+      // Unregister from Stream Video
+      if (videoClient) {
+        await videoClient.removeDevice(token.data);
+        console.log('[NotificationService] Unregistered push token from Stream Video');
+      }
+    } catch (error) {
+      console.error('[NotificationService] Error unregistering push token from Stream:', error);
     }
   }
 
@@ -288,6 +340,83 @@ export class NotificationService {
     });
   }
 
+  /**
+   * Send call notification to user
+   */
+  static async sendCallNotification(
+    userId: string,
+    callData: {
+      callId: string;
+      callerName: string;
+      callerAvatar?: string;
+      type: 'voice' | 'video';
+    }
+  ): Promise<void> {
+    try {
+      const callTypeText = callData.type === 'video' ? 'video call' : 'voice call';
+
+      // Add in-app notification
+      this.addInAppNotification({
+        type: 'call',
+        title: `Incoming ${callTypeText}`,
+        message: `${callData.callerName} is calling you`,
+        data: {
+          callId: callData.callId,
+          callerName: callData.callerName,
+          callerAvatar: callData.callerAvatar,
+          type: callData.type
+        },
+      });
+
+      // Schedule push notification
+      await this.schedulePushNotification({
+        type: 'call',
+        title: `Incoming ${callTypeText}`,
+        body: `${callData.callerName} is calling you`,
+        data: {
+          callId: callData.callId,
+          callerName: callData.callerName,
+          callerAvatar: callData.callerAvatar,
+          type: callData.type,
+          action: 'incoming_call'
+        },
+      });
+    } catch (error) {
+      console.error('Failed to send call notification:', error);
+    }
+  }
+
+  /**
+   * Send call response notification (accepted/rejected)
+   */
+  static async sendCallResponseNotification(
+    userId: string,
+    callId: string,
+    response: 'accepted' | 'rejected'
+  ): Promise<void> {
+    try {
+      const responseText = response === 'accepted' ? 'accepted' : 'declined';
+
+      // Add in-app notification
+      this.addInAppNotification({
+        type: 'call',
+        title: 'Call Response',
+        message: `Your call has been ${responseText}`,
+        data: { callId, response },
+      });
+
+      // Schedule push notification
+      await this.schedulePushNotification({
+        type: 'call',
+        title: 'Call Response',
+        body: `Your call has been ${responseText}`,
+        data: { callId, response },
+      });
+    } catch (error) {
+      console.error('Failed to send call response notification:', error);
+    }
+  }
+
   static getNotificationIcon(type: NotificationType): string {
     switch (type) {
       case 'booking_confirmation':
@@ -320,5 +449,59 @@ export class NotificationService {
     if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
 
     return date.toLocaleDateString();
+  }
+
+  /**
+   * Handle incoming Stream push notifications
+   */
+  static handleStreamPushNotification(notification: any): void {
+    try {
+      const data = notification.request?.trigger?.payload || notification.data || {};
+
+      // Handle chat message notifications
+      if (data.type === 'message.new' || data.sender === 'stream.chat') {
+        const channelId = data.cid || data.channel_id;
+        const messageText = data.message?.text || 'New message';
+        const senderName = data.user?.name || data.sender_name || 'Someone';
+
+        this.addInAppNotification({
+          type: 'message',
+          title: `Message from ${senderName}`,
+          message: messageText,
+          data: { channelId, messageId: data.message?.id },
+        });
+
+        // Schedule local push notification if app is in background
+        this.schedulePushNotification({
+          type: 'message',
+          title: `Message from ${senderName}`,
+          body: messageText,
+          data: { channelId },
+        });
+      }
+
+      // Handle video call notifications
+      if (data.type === 'call.ring' || data.sender === 'stream.video') {
+        const callId = data.call_cid || data.call_id;
+        const callerName = data.user?.name || data.caller_name || 'Someone';
+
+        this.addInAppNotification({
+          type: 'call',
+          title: `Incoming call from ${callerName}`,
+          message: 'Tap to answer',
+          data: { callId },
+        });
+
+        // Schedule local push notification for call
+        this.schedulePushNotification({
+          type: 'call',
+          title: `Incoming call from ${callerName}`,
+          body: 'Tap to answer',
+          data: { callId },
+        });
+      }
+    } catch (error) {
+      console.error('[NotificationService] Error handling Stream push notification:', error);
+    }
   }
 }

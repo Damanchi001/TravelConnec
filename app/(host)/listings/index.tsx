@@ -158,6 +158,7 @@ export default function ListingsDashboardScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }
         showsVerticalScrollIndicator={false}
+        keyboardDismissMode="on-drag"
       >
         {filteredListings.length === 0 ? (
           <View style={styles.emptyContainer}>

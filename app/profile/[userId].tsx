@@ -35,7 +35,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BookingCard, BookingFilters } from "../../src/components/booking";
 import { useFollowStatus, useUserProfile } from "../../src/hooks";
 import { useBookings } from "../../src/hooks/useBookings";
-import { chatService, videoService } from "../../src/services/stream";
+import { chatService } from "../../src/services/stream";
+import { callSignalingService } from "../../src/services/stream/call-signaling";
 import { useAuthStore } from "../../src/stores/auth-store";
 import { useSubscriptionStore } from "../../src/stores/subscription-store";
 
@@ -157,17 +158,53 @@ export default function UserProfileScreen() {
     if (!currentUserProfile?.id || !userId) return;
 
     try {
-      // Generate unique call ID
-      const callId = `call_${currentUserProfile.id}_${userId}_${Date.now()}`;
+      // Check subscription permissions for video calls
+      if (callType === 'video' && status.tier === 'traveler') {
+        Alert.alert(
+          'Premium Feature',
+          'Video calling requires a premium subscription. Upgrade to make video calls.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Upgrade', onPress: () => router.push('/(subscription)/plans' as any) }
+          ]
+        );
+        return;
+      }
 
-      // Create call with both users
-      const call = await videoService.createCall(callId, [currentUserProfile.id, userId as string]);
+      // Check if user is already in a call
+      if (callSignalingService.isUserInCall(currentUserProfile.id)) {
+        Alert.alert('Call in Progress', 'You are already in a call. Please end the current call first.');
+        return;
+      }
 
-      // Navigate to appropriate call screen
+      // Check if target user is already in a call
+      if (callSignalingService.isUserInCall(userId as string)) {
+        Alert.alert('User Busy', 'The user is currently in another call.');
+        return;
+      }
+
+      // Check if target user has video calling disabled (if video call)
       if (callType === 'video') {
-        router.push(`/chat/video-call/${callId}` as any);
+        // This would check user preferences for video calling availability
+        // For now, assume all users can receive video calls
+      }
+
+      // Initiate call using signaling service
+      const result = await callSignalingService.initiateCall(
+        currentUserProfile.id,
+        userId as string,
+        callType
+      );
+
+      if (result.success && result.callId) {
+        // Navigate to appropriate call screen
+        if (callType === 'video') {
+          router.push(`/chat/video-call/${result.callId}` as any);
+        } else {
+          router.push(`/chat/voice-call/${result.callId}` as any);
+        }
       } else {
-        router.push(`/chat/voice-call/${callId}` as any);
+        Alert.alert('Call Failed', result.error || 'Failed to start call. Please try again.');
       }
     } catch (error) {
       console.error('Failed to start call:', error);

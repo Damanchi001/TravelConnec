@@ -6,15 +6,24 @@ export class ChatService {
     if (!chatClient) {
       throw new Error('Chat client not initialized');
     }
+
+    console.log('[ChatService] Connecting user to Stream Chat:', {
+      id: user.id,
+      name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
+      hasImage: !!user.avatar_url
+    });
+
     await chatClient.connectUser(
       {
         id: user.id,
-        name: `${user.first_name} ${user.last_name}`,
-        image: user.avatar_url,
-        role: user.role,
+        name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'User',
+        image: user.avatar_url || undefined,
+        role: user.role || 'user',
       },
       token
     );
+
+    console.log('[ChatService] User connected to Stream Chat successfully');
   }
 
   async disconnectUser() {
@@ -51,18 +60,28 @@ export class ChatService {
     if (!chatClient) {
       throw new Error('Chat client not initialized');
     }
+
     // Check if user is connected to chat
     if (!chatClient.userID) {
-      throw new Error('Call connectUser or connectAnonymousUser before creating a channel');
+      throw new Error('User not connected to chat. Call connectUser first.');
+    }
+
+    // Ensure the connected user matches the requested user
+    if (chatClient.userID !== userId) {
+      throw new Error(`Connected user (${chatClient.userID}) does not match requested user (${userId})`);
     }
 
     const channelId = [userId, otherUserId].sort().join('-');
+
+    console.log('[ChatService] Creating/getting direct message channel:', channelId);
 
     const channel = chatClient.channel('messaging', channelId, {
       members: [userId, otherUserId],
     });
 
     await channel.create();
+    console.log('[ChatService] Channel created successfully:', channel.id);
+
     return channel;
   }
 
@@ -78,6 +97,15 @@ export class ChatService {
     });
 
     return channels;
+  }
+
+  async getChannelById(channelId: string, type: string = 'messaging'): Promise<Channel> {
+    if (!chatClient) {
+      throw new Error('Chat client not initialized');
+    }
+    const channel = chatClient.channel(type, channelId);
+    await channel.watch();
+    return channel;
   }
 
   async markChannelRead(channelId: string) {

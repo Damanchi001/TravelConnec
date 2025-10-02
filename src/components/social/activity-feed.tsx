@@ -4,7 +4,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import React, { useEffect, useRef, useState } from 'react';
-import { FlatList, Image, Modal, Platform, RefreshControl, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { FlatList, Image, Modal, Platform, RefreshControl, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { feedsService } from '../../services/stream';
 import { useAuthStore } from '../../stores/auth-store';
 
@@ -540,7 +540,7 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
           onRequestClose={() => setShowCommentModal(false)}
         >
           <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
+            <ScrollView style={styles.modalContent} keyboardDismissMode="on-drag">
               <ThemedText style={styles.modalTitle}>Add Comment</ThemedText>
               <TextInput
                 style={[styles.commentInput, { color: colors.text }]}
@@ -566,7 +566,7 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
                   <ThemedText style={styles.submitButtonText}>Comment</ThemedText>
                 </TouchableOpacity>
               </View>
-            </View>
+            </ScrollView>
           </View>
         </Modal>
       )}

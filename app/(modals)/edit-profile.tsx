@@ -4,17 +4,16 @@ import {
   Poppins_600SemiBold,
   useFonts,
 } from "@expo-google-fonts/poppins";
-import * as ImagePicker from 'expo-image-picker';
 import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import {
   ArrowLeft,
-  Save,
   User
 } from "lucide-react-native";
 import React, { useState } from "react";
 import {
   Alert,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -23,7 +22,7 @@ import {
   View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { supabase } from "../../src/services/supabase/client";
+import { ImagePickerComponent } from "../../src/components/forms";
 import { useAuthStore } from "../../src/stores/auth-store";
 
 const interests = [
@@ -100,92 +99,6 @@ export default function EditProfileModal() {
     }));
   };
 
-  const pickImage = async () => {
-    try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permissionResult.granted) {
-        Alert.alert('Permission needed', 'Please grant permission to access your photos');
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        const asset = result.assets[0];
-        // Upload to Supabase and get URL
-        const fileName = `profile-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-        const filePath = `profiles/${fileName}`;
-
-        const response = await fetch(asset.uri);
-        const blob = await response.blob();
-
-        const { data, error } = await supabase.storage
-          .from('profiles')
-          .upload(filePath, blob, {
-            contentType: 'image/jpeg',
-          });
-
-        if (error) throw error;
-
-        const { data: { publicUrl } } = supabase.storage
-          .from('profiles')
-          .getPublicUrl(filePath);
-
-        setFormData(prev => ({ ...prev, avatar_url: publicUrl }));
-      }
-    } catch (error) {
-      console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to pick image');
-    }
-  };
-
-  const takePhoto = async () => {
-    try {
-      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permissionResult.granted) {
-        Alert.alert('Permission needed', 'Please grant permission to access your camera');
-        return;
-      }
-
-      const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        const asset = result.assets[0];
-        // Upload to Supabase and get URL
-        const fileName = `profile-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-        const filePath = `profiles/${fileName}`;
-
-        const response = await fetch(asset.uri);
-        const blob = await response.blob();
-
-        const { data, error } = await supabase.storage
-          .from('profiles')
-          .upload(filePath, blob, {
-            contentType: 'image/jpeg',
-          });
-
-        if (error) throw error;
-
-        const { data: { publicUrl } } = supabase.storage
-          .from('profiles')
-          .getPublicUrl(filePath);
-
-        setFormData(prev => ({ ...prev, avatar_url: publicUrl }));
-      }
-    } catch (error) {
-      console.error('Error taking photo:', error);
-      Alert.alert('Error', 'Failed to take photo');
-    }
-  };
 
   return (
     <View style={styles.container}>
@@ -204,7 +117,9 @@ export default function EditProfileModal() {
           onPress={handleSave}
           disabled={isLoading}
         >
-          <Save size={20} color={isLoading ? "#999" : "#138AFE"} />
+          <Text style={[styles.saveButtonText, isLoading && styles.saveButtonTextDisabled]}>
+            {isLoading ? 'Saving...' : 'Save'}
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -215,25 +130,30 @@ export default function EditProfileModal() {
           { paddingBottom: insets.bottom + 40 }
         ]}
         showsVerticalScrollIndicator={false}
+        keyboardDismissMode="on-drag"
       >
         {/* Profile Picture Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Profile Picture</Text>
-          <TouchableOpacity style={styles.profileImageContainer} onPress={pickImage}>
-            {formData.avatar_url ? (
-              <Image source={{ uri: formData.avatar_url }} style={styles.profileImage} />
-            ) : (
-              <View style={styles.profileImagePlaceholder}>
-                <User size={40} color="#666" />
+          <ImagePickerComponent
+            onImageSelected={(uri) => setFormData(prev => ({ ...prev, avatar_url: uri }))}
+            aspect={[1, 1]}
+            quality={0.8}
+            storageBucket="profiles"
+          >
+            <View style={styles.profileImageContainer}>
+              {formData.avatar_url ? (
+                <Image source={{ uri: formData.avatar_url }} style={styles.profileImage} />
+              ) : (
+                <View style={styles.profileImagePlaceholder}>
+                  <User size={40} color="#666" />
+                </View>
+              )}
+              <View style={styles.cameraButton}>
+                <Text style={styles.cameraIcon}>📷</Text>
               </View>
-            )}
-            <View style={styles.cameraButton}>
-              <Text style={styles.cameraIcon}>📷</Text>
             </View>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.takePhotoButton} onPress={takePhoto}>
-            <Text style={styles.takePhotoText}>Take Photo</Text>
-          </TouchableOpacity>
+          </ImagePickerComponent>
           <Text style={styles.sectionSubtitle}>Tap to select from gallery or take a photo</Text>
         </View>
 
@@ -346,6 +266,14 @@ const styles = StyleSheet.create({
   },
   saveButtonDisabled: {
     opacity: 0.5,
+  },
+  saveButtonText: {
+    fontFamily: "Poppins_600SemiBold",
+    fontSize: 16,
+    color: "#138AFE",
+  },
+  saveButtonTextDisabled: {
+    color: "#999",
   },
   scrollView: {
     flex: 1,

@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,13 +19,19 @@ export default function ExploreScreen() {
   };
 
   const handleCountryPress = (country: CountryData) => {
-    // TODO: Navigate to country tabs view (Cities, Locals)
-    console.log('Country pressed:', country.name);
+    // Navigate to country categories view
+    router.push({
+      pathname: '/explore/categories',
+      params: { category: 'locals', location: country.name }
+    });
   };
 
   const handleCityPress = (city: CityData) => {
-    // TODO: Navigate to city tabs view (Destinations, Experiences, Locals)
-    console.log('City pressed:', city.name);
+    // Navigate to city categories view
+    router.push({
+      pathname: '/explore/categories',
+      params: { category: 'experiences', location: city.name }
+    });
   };
 
   const handlePlanTrip = (city: CityData) => {
@@ -35,7 +42,7 @@ export default function ExploreScreen() {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} keyboardDismissMode="on-drag">
           {/* Header */}
           <View style={styles.header}>
             <ThemedText type="title" style={styles.headerTitle}>

@@ -6,6 +6,7 @@ import {
   Poppins_600SemiBold,
   useFonts,
 } from "@expo-google-fonts/poppins";
+import { useQuery } from '@tanstack/react-query';
 import { Image } from "expo-image";
 import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -13,10 +14,12 @@ import {
   Edit3,
   MessageCircle,
   Phone,
+  Plus,
   Search,
-  User
+  User,
+  Users
 } from "lucide-react-native";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -26,6 +29,8 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { groupsService } from '../../src/services/groups';
+import { useAuthStore } from '../../src/stores/auth-store';
 
 // Initialize with mock data for now
 const initializeMockData = () => {
@@ -124,8 +129,51 @@ export default function MessagesScreen() {
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("all");
+  const [showNewMessageOptions, setShowNewMessageOptions] = useState(false);
 
   const { chats, setChats } = useMessageStore();
+  const { profile } = useAuthStore();
+
+  // Fetch user groups
+  const { data: userGroups, isLoading: groupsLoading } = useQuery({
+    queryKey: ['user-groups', profile?.id],
+    queryFn: () => groupsService.getUserGroups(profile?.id || ''),
+    enabled: !!profile?.id,
+  });
+
+  // Convert groups to Chat format and merge with existing chats
+  const allChats = useMemo(() => {
+    const existingChats = [...chats];
+
+    if (userGroups) {
+      userGroups.forEach(group => {
+        const groupChat: Chat = {
+          id: group.stream_channel_id,
+          type: 'group',
+          name: group.group_name,
+          avatar: group.group_avatar_url || 'https://images.unsplash.com/photo-1537953773345-d172ccf13cf1?w=60&h=60&fit=crop',
+          participants: [], // We'll need to fetch this separately if needed
+          lastMessage: undefined, // We'll need to fetch this from Stream
+          unreadCount: 0, // We'll need to implement this
+          createdAt: new Date(group.joined_at),
+          updatedAt: new Date(group.joined_at),
+          isActive: true,
+        };
+
+        // Check if this group chat already exists
+        const existingIndex = existingChats.findIndex(chat => chat.id === group.stream_channel_id);
+        if (existingIndex >= 0) {
+          // Update existing
+          existingChats[existingIndex] = { ...existingChats[existingIndex], ...groupChat };
+        } else {
+          // Add new
+          existingChats.unshift(groupChat); // Add to beginning
+        }
+      });
+    }
+
+    return existingChats;
+  }, [chats, userGroups]);
 
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
@@ -150,6 +198,16 @@ export default function MessagesScreen() {
   };
 
   const handleNewMessage = () => {
+    setShowNewMessageOptions(!showNewMessageOptions);
+  };
+
+  const handleCreateGroup = () => {
+    setShowNewMessageOptions(false);
+    router.push("/create-group" as any);
+  };
+
+  const handleNewDirectMessage = () => {
+    setShowNewMessageOptions(false);
     router.push("/new-chat" as any);
   };
 
@@ -161,7 +219,7 @@ export default function MessagesScreen() {
     router.push(`/chat?id=${chat.id}` as any);
   };
 
-  const filteredChats = chats.filter((chat: Chat) => {
+  const filteredChats = allChats.filter((chat: Chat) => {
     const matchesSearch = chat.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           (chat.lastMessage?.content.toLowerCase().includes(searchQuery.toLowerCase()) ?? false);
 
@@ -289,10 +347,10 @@ export default function MessagesScreen() {
             ]}>
               {tab.charAt(0).toUpperCase() + tab.slice(1)}
             </Text>
-            {tab === "unread" && chats.filter(c => c.unreadCount > 0).length > 0 && (
+            {tab === "unread" && allChats.filter(c => c.unreadCount > 0).length > 0 && (
               <View style={styles.tabBadge}>
                 <Text style={styles.tabBadgeText}>
-                  {chats.filter(c => c.unreadCount > 0).length}
+                  {allChats.filter(c => c.unreadCount > 0).length}
                 </Text>
               </View>
             )}
@@ -308,6 +366,7 @@ export default function MessagesScreen() {
           { paddingBottom: insets.bottom + 100 }
         ]}
         showsVerticalScrollIndicator={false}
+        keyboardDismissMode="on-drag"
       >
         {filteredChats.length > 0 ? (
           <View style={styles.messagesList}>
@@ -324,9 +383,40 @@ export default function MessagesScreen() {
         )}
       </ScrollView>
 
+      {/* New Message Options */}
+      {showNewMessageOptions && (
+        <View style={styles.newMessageOptions}>
+          <TouchableOpacity
+            style={styles.newMessageOption}
+            onPress={handleCreateGroup}
+          >
+            <View style={styles.optionIcon}>
+              <Users size={20} color="#138AFE" />
+            </View>
+            <Text style={styles.optionText}>Create Group</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.newMessageOption}
+            onPress={handleNewDirectMessage}
+          >
+            <View style={styles.optionIcon}>
+              <MessageCircle size={20} color="#138AFE" />
+            </View>
+            <Text style={styles.optionText}>New Message</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Floating Action Button */}
-      <TouchableOpacity style={styles.fab} onPress={handleNewMessage}>
-        <Edit3 size={24} color="#000" />
+      <TouchableOpacity
+        style={[styles.fab, showNewMessageOptions && styles.fabActive]}
+        onPress={handleNewMessage}
+      >
+        {showNewMessageOptions ? (
+          <Plus size={24} color="#000" style={{ transform: [{ rotate: '45deg' }] }} />
+        ) : (
+          <Edit3 size={24} color="#000" />
+        )}
       </TouchableOpacity>
     </View>
   );
@@ -562,5 +652,42 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 8,
+  },
+  fabActive: {
+    backgroundColor: "#E5E7EB",
+  },
+  newMessageOptions: {
+    position: "absolute",
+    bottom: 170,
+    right: 20,
+    backgroundColor: "#FFF",
+    borderRadius: 12,
+    paddingVertical: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 8,
+    minWidth: 180,
+  },
+  newMessageOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  optionIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(19, 138, 254, 0.1)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  optionText: {
+    fontFamily: "Poppins_500Medium",
+    fontSize: 16,
+    color: "#000",
   },
 });

@@ -1,19 +1,17 @@
-import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from "expo-router";
 import { ArrowLeft, Calendar, MapPin, Plus, X } from "lucide-react-native";
 import React, { useState } from "react";
 import {
-  Alert,
   Image,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { supabase } from "../src/services/supabase/client";
+import { ImagePickerComponent } from "../src/components/forms";
 
 interface ListingFormData {
   title: string;
@@ -72,98 +70,11 @@ export default function ListingDetailsScreen() {
     }
   };
 
-  const addImage = async () => {
-    Alert.alert(
-      'Add Photo',
-      'Choose how to add a photo',
-      [
-        { text: 'Camera', onPress: pickFromCamera },
-        { text: 'Photo Library', onPress: pickFromLibrary },
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
-  };
-
-  const pickFromLibrary = async () => {
-    try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permissionResult.granted) {
-        Alert.alert('Permission needed', 'Please grant permission to access your photos');
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
-        allowsMultipleSelection: false,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        await uploadImage(result.assets[0]);
-      }
-    } catch (error) {
-      console.error('Error picking from library:', error);
-      Alert.alert('Error', 'Failed to pick image from library. Please try again.');
-    }
-  };
-
-  const pickFromCamera = async () => {
-    try {
-      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permissionResult.granted) {
-        Alert.alert('Permission needed', 'Please grant permission to access your camera');
-        return;
-      }
-
-      const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        await uploadImage(result.assets[0]);
-      }
-    } catch (error) {
-      console.error('Error taking photo:', error);
-      Alert.alert('Error', 'Failed to take photo. Please try again.');
-    }
-  };
-
-  const uploadImage = async (asset: ImagePicker.ImagePickerAsset) => {
-    try {
-      const fileName = `listing-${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
-      const filePath = `listings/${fileName}`;
-
-      const response = await fetch(asset.uri);
-      const blob = await response.blob();
-
-      const { error } = await supabase.storage
-        .from('listing-images')
-        .upload(filePath, blob, {
-          contentType: 'image/jpeg',
-        });
-
-      if (error) {
-        console.error('Upload error:', error);
-        Alert.alert('Error', 'Failed to upload image. Please try again.');
-        return;
-      }
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('listing-images')
-        .getPublicUrl(filePath);
-
-      setFormData(prev => ({
-        ...prev,
-        images: [...prev.images, publicUrl]
-      }));
-    } catch (error) {
-      console.error('Error uploading image:', error);
-      Alert.alert('Error', 'Failed to upload image. Please try again.');
-    }
+  const addImageUrl = (url: string) => {
+    setFormData(prev => ({
+      ...prev,
+      images: [...prev.images, url]
+    }));
   };
 
   const removeImage = (index: number) => {
@@ -295,7 +206,7 @@ export default function ListingDetailsScreen() {
         <View style={styles.headerSpacer} />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false} keyboardDismissMode="on-drag">
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Basic Information</Text>
 
@@ -409,10 +320,18 @@ export default function ListingDetailsScreen() {
             ))}
 
             {formData.images.length < 10 && (
-              <TouchableOpacity style={styles.addImageButton} onPress={addImage}>
-                <Plus size={24} color="#64748B" />
-                <Text style={styles.addImageText}>Add Photo</Text>
-              </TouchableOpacity>
+              <ImagePickerComponent
+                onImageSelected={addImageUrl}
+                aspect={[4, 3]}
+                quality={0.8}
+                storageBucket="listing-images"
+                source="both"
+              >
+                <View style={styles.addImageButton}>
+                  <Plus size={24} color="#64748B" />
+                  <Text style={styles.addImageText}>Add Photo</Text>
+                </View>
+              </ImagePickerComponent>
             )}
           </View>
         </View>

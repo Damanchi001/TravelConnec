@@ -1,4 +1,5 @@
 import type { AuthError, Session, User } from '@supabase/supabase-js';
+import * as Linking from 'expo-linking';
 import { supabase } from './client';
 
 export interface SignUpData {
@@ -158,8 +159,9 @@ export class AuthService {
 
       console.log('[AuthService] Extracted names:', { firstName: profileFirstName, lastName: profileLastName });
 
+      console.log('[AuthService] Attempting to insert into user_profiles table');
       const { error } = await supabase
-        .from('profiles')
+        .from('user_profiles')
         .insert({
           id: user.id,
           email: user.email,
@@ -171,6 +173,9 @@ export class AuthService {
 
       if (error) {
         console.error('[AuthService] Error creating user profile:', error);
+        console.error('[AuthService] Error code:', error.code);
+        console.error('[AuthService] Error message:', error.message);
+        console.error('[AuthService] Error details:', error.details);
         return { success: false, error: error.message };
       }
 
@@ -187,7 +192,7 @@ export class AuthService {
    */
   static async getUserProfile(userId: string): Promise<{ data: UserProfile | null; error: any }> {
     const { data, error } = await supabase
-      .from('profiles')
+      .from('user_profiles')
       .select('*')
       .eq('id', userId)
       .single();
@@ -200,7 +205,7 @@ export class AuthService {
    */
   static async updateUserProfile(userId: string, updates: Partial<UserProfile>): Promise<{ error: any }> {
     const { error } = await supabase
-      .from('profiles')
+      .from('user_profiles')
       .update({ ...updates, updated_at: new Date().toISOString() })
       .eq('id', userId);
 
@@ -216,14 +221,20 @@ export class AuthService {
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: undefined, // Let Supabase handle the redirect for React Native
-          skipBrowserRedirect: false, // Allow browser redirect for OAuth flow
+          redirectTo: 'mynewtravelproject://',
+          skipBrowserRedirect: true, // CHANGED: Skip browser redirect so we can handle it
         },
       });
 
       if (error) {
         console.error('[AuthService] Google OAuth error:', error);
         return { data: null, error };
+      }
+
+      // ADDED: Manually open the OAuth URL in the browser
+      if (data?.url) {
+        console.log('[AuthService] Opening OAuth URL:', data.url);
+        await Linking.openURL(data.url);
       }
 
       console.log('[AuthService] Google OAuth initiated successfully');
@@ -243,14 +254,20 @@ export class AuthService {
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'facebook',
         options: {
-          redirectTo: undefined,
-          skipBrowserRedirect: false,
+          redirectTo: 'mynewtravelproject://',
+          skipBrowserRedirect: true, // CHANGED: Skip browser redirect so we can handle it
         },
       });
 
       if (error) {
         console.error('[AuthService] Facebook OAuth error:', error);
         return { data: null, error };
+      }
+
+      // ADDED: Manually open the OAuth URL in the browser
+      if (data?.url) {
+        console.log('[AuthService] Opening OAuth URL:', data.url);
+        await Linking.openURL(data.url);
       }
 
       console.log('[AuthService] Facebook OAuth initiated successfully');
@@ -270,8 +287,8 @@ export class AuthService {
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'apple',
         options: {
-          redirectTo: undefined,
-          skipBrowserRedirect: false,
+         redirectTo: 'mynewtravelproject://',
+          skipBrowserRedirect: true, // CHANGED: Skip browser redirect so we can handle it
         },
       });
 
@@ -280,10 +297,49 @@ export class AuthService {
         return { data: null, error };
       }
 
+      // ADDED: Manually open the OAuth URL in the browser
+      if (data?.url) {
+        console.log('[AuthService] Opening OAuth URL:', data.url);
+        await Linking.openURL(data.url);
+      }
+
       console.log('[AuthService] Apple OAuth initiated successfully');
       return { data, error: null };
     } catch (error) {
       console.error('[AuthService] Apple OAuth exception:', error);
+      return { data: null, error: error as AuthError };
+    }
+  }
+
+  /**
+   * Sign in with LinkedIn OAuth
+   */
+  static async signInWithLinkedIn(): Promise<{ data: any; error: AuthError | null }> {
+    try {
+      console.log('[AuthService] Starting LinkedIn OAuth sign-in');
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'linkedin_oidc',
+        options: {
+          redirectTo: 'mynewtravelproject://',
+          skipBrowserRedirect: true, // CHANGED: Skip browser redirect so we can handle it
+        },
+      });
+
+      if (error) {
+        console.error('[AuthService] LinkedIn OAuth error:', error);
+        return { data: null, error };
+      }
+
+      // ADDED: Manually open the OAuth URL in the browser
+      if (data?.url) {
+        console.log('[AuthService] Opening OAuth URL:', data.url);
+        await Linking.openURL(data.url);
+      }
+
+      console.log('[AuthService] LinkedIn OAuth initiated successfully');
+      return { data, error: null };
+    } catch (error) {
+      console.error('[AuthService] LinkedIn OAuth exception:', error);
       return { data: null, error: error as AuthError };
     }
   }

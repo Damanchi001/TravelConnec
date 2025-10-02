@@ -4,12 +4,14 @@ import {
   Poppins_600SemiBold,
   useFonts,
 } from "@expo-google-fonts/poppins";
+import { useQuery } from '@tanstack/react-query';
 import { Image } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import {
   ArrowLeft,
   Image as ImageIcon,
+  MoreVertical,
   Paperclip,
   Phone,
   Send,
@@ -29,6 +31,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuthGuard } from '../src/hooks';
+import { groupsService } from '../src/services/groups';
 import { chatService, videoService } from '../src/services/stream';
 
 interface ChatMessage {
@@ -78,13 +81,13 @@ const mockMessages: ChatMessage[] = [
   },
 ];
 
-// Mock contact data
-const mockContact = {
-  id: 1,
-  name: "Emily Rodriguez",
+// Contact data - in a real app, this would be fetched from user profiles
+const getContactData = (otherUserId: string) => ({
+  id: otherUserId,
+  name: "Chat User", // Would be fetched from profile
   avatar: "https://images.unsplash.com/photo-1494790108755-2616b612b786?w=60&h=60&fit=crop&crop=face",
-  online: true,
-};
+  online: true, // Would be determined from presence
+});
 
 export default function ChatScreen() {
   const insets = useSafeAreaInsets();
@@ -104,27 +107,62 @@ export default function ChatScreen() {
   // Use auth guard to ensure user is authenticated
   const { isAuthenticated, user, isLoading: authLoading } = useAuthGuard();
 
+  // Check if this is a group chat
+  const { data: groupData } = useQuery({
+    queryKey: ['group', id],
+    queryFn: () => groupsService.getGroupDetails(id as string),
+    enabled: !!id && isAuthenticated,
+  });
+
+  const isGroupChat = !!groupData;
+  const channelId = id as string;
+
+  // Get contact data for the other user (for direct messages)
+  const contactData = getContactData(channelId);
+
   // Initialize chat channel
   useEffect(() => {
+    let unsubscribeNewMessage: any = null;
+    let unsubscribeMessageUpdate: any = null;
+
     const initializeChat = async () => {
       try {
         setLoading(true);
 
         if (!isAuthenticated || !user) {
           console.log('User not authenticated, skipping chat initialization');
+          setLoading(false);
           return;
         }
 
         // Use actual user ID from auth
         const currentUserId = user.id;
-        const otherUserId = id as string || 'other-user';
+        const otherUserId = id as string;
 
-        // Get or create direct message channel
-        const chatChannel = await chatService.getOrCreateDirectMessage(currentUserId, otherUserId);
+        if (!otherUserId) {
+          console.error('No other user ID provided');
+          setLoading(false);
+          return;
+        }
+
+        console.log('[Chat] Initializing chat for channel:', channelId);
+
+        let chatChannel;
+        if (isGroupChat) {
+          // For group chats, get the existing channel
+          chatChannel = await chatService.getChannelById(channelId);
+        } else {
+          // For direct messages, get or create the channel
+          const otherUserId = channelId; // For direct messages, channelId is the other user's ID
+          chatChannel = await chatService.getOrCreateDirectMessage(currentUserId, otherUserId);
+        }
+        console.log('[Chat] Channel initialized:', chatChannel.id);
         setChannel(chatChannel);
 
         // Load message history
         const messageHistory = await chatService.getChannelMessages(chatChannel.id!);
+        console.log('[Chat] Loaded message history:', messageHistory.messages?.length || 0, 'messages');
+
         const transformedMessages = messageHistory.messages?.map((msg: any) => ({
           id: msg.id,
           text: msg.text,
@@ -133,10 +171,16 @@ export default function ChatScreen() {
           read: msg.read_by?.includes(currentUserId) || false,
         })) || [];
 
-        setMessages(transformedMessages);
+        // Only use real messages if we have them, otherwise keep empty array
+        if (transformedMessages.length > 0) {
+          setMessages(transformedMessages);
+        } else {
+          setMessages([]); // Start with empty chat
+        }
 
-        // Listen for new messages
-        chatService.onChannelEvent(chatChannel.id!, 'message.new', (event) => {
+        // Listen for new messages in real-time
+        unsubscribeNewMessage = chatService.onChannelEvent(chatChannel.id!, 'message.new', (event) => {
+          console.log('[Chat] New message received:', event.message);
           const newMessage = {
             id: event.message.id,
             text: event.message.text,
@@ -144,12 +188,26 @@ export default function ChatScreen() {
             isSender: event.message.user.id === currentUserId,
             read: false,
           };
-          setMessages(prev => [...prev, newMessage]);
+          setMessages(prev => {
+            // Avoid duplicates
+            if (prev.some(msg => msg.id === newMessage.id)) {
+              return prev;
+            }
+            return [...prev, newMessage];
+          });
+        });
+
+        // Listen for message updates (read receipts, etc.)
+        unsubscribeMessageUpdate = chatService.onChannelEvent(chatChannel.id!, 'message.updated', (event) => {
+          console.log('[Chat] Message updated:', event.message);
+          // Update message read status, etc.
         });
 
       } catch (error) {
-        console.error('Failed to initialize chat:', error);
-        // Keep mock data as fallback
+        console.error('[Chat] Failed to initialize chat:', error);
+        // Don't fall back to mock data - show empty chat
+        setMessages([]);
+        Alert.alert('Chat Error', 'Unable to load chat. Please check your connection and try again.');
       } finally {
         setLoading(false);
       }
@@ -158,6 +216,16 @@ export default function ChatScreen() {
     if (fontsLoaded && !authLoading) {
       initializeChat();
     }
+
+    // Cleanup function
+    return () => {
+      if (unsubscribeNewMessage) {
+        unsubscribeNewMessage.unsubscribe?.();
+      }
+      if (unsubscribeMessageUpdate) {
+        unsubscribeMessageUpdate.unsubscribe?.();
+      }
+    };
   }, [fontsLoaded, id, isAuthenticated, user, authLoading]);
 
   if (!fontsLoaded) {
@@ -165,39 +233,34 @@ export default function ChatScreen() {
   }
 
   const handleSendMessage = async () => {
-    if (messageText.trim() && channel) {
-      try {
-        // Send message via Stream
-        await chatService.sendMessage(channel.id, messageText.trim());
+    if (!messageText.trim()) return;
 
-        // Optimistically add to local state
-        const newMessage: ChatMessage = {
-          id: Date.now().toString(),
-          text: messageText.trim(),
-          timestamp: new Date(),
-          isSender: true,
-          read: false,
-        };
-        setMessages([...messages, newMessage]);
-        setMessageText("");
+    if (!channel) {
+      Alert.alert('Error', 'Chat not initialized. Please try again.');
+      return;
+    }
 
-        // Scroll to bottom
-        setTimeout(() => {
-          scrollViewRef.current?.scrollToEnd({ animated: true });
-        }, 100);
-      } catch (error) {
-        console.error('Failed to send message:', error);
-        // Fallback to local state only
-        const newMessage: ChatMessage = {
-          id: Date.now().toString(),
-          text: messageText.trim(),
-          timestamp: new Date(),
-          isSender: true,
-          read: false,
-        };
-        setMessages([...messages, newMessage]);
-        setMessageText("");
-      }
+    try {
+      console.log('[Chat] Sending message:', messageText.trim());
+
+      // Send message via Stream Chat
+      const sentMessage = await chatService.sendMessage(channel.id, messageText.trim());
+      console.log('[Chat] Message sent successfully:', sentMessage);
+
+      // Clear input immediately
+      setMessageText("");
+
+      // The message will be received via the real-time listener
+      // No need to manually add to local state
+
+      // Scroll to bottom
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+
+    } catch (error) {
+      console.error('[Chat] Failed to send message:', error);
+      Alert.alert('Send Error', 'Failed to send message. Please check your connection and try again.');
     }
   };
 
@@ -220,6 +283,13 @@ export default function ChatScreen() {
     } catch (error) {
       console.error('Failed to start call:', error);
       Alert.alert('Error', 'Failed to start call. Please try again.');
+    }
+  };
+
+  const handleGroupSettings = () => {
+    if (isGroupChat && groupData) {
+      // Navigate to group settings screen
+      router.push(`/group-settings/${groupData.id}` as any);
     }
   };
 
@@ -282,23 +352,31 @@ export default function ChatScreen() {
         <View style={styles.headerContent}>
           <View style={styles.avatarContainer}>
             <Image
-              source={{ uri: mockContact.avatar }}
+              source={{ uri: isGroupChat ? (groupData?.avatar_url || 'https://images.unsplash.com/photo-1537953773345-d172ccf13cf1?w=60&h=60&fit=crop') : contactData.avatar }}
               style={styles.headerAvatar}
               contentFit="cover"
             />
-            {mockContact.online && <View style={styles.onlineIndicator} />}
+            {!isGroupChat && contactData.online && <View style={styles.onlineIndicator} />}
           </View>
           <View>
-            <Text style={styles.headerName}>{mockContact.name}</Text>
+            <Text style={styles.headerName}>
+              {isGroupChat ? groupData?.name : contactData.name}
+            </Text>
             <Text style={styles.headerStatus}>
-              {mockContact.online ? "Online" : "Offline"}
+              {isGroupChat ? `${groupData ? 'Group' : 'Loading...'}` : (contactData.online ? "Online" : "Offline")}
             </Text>
           </View>
         </View>
 
-        <TouchableOpacity style={styles.callButton} onPress={handleCall}>
-          <Phone size={20} color="#000" />
-        </TouchableOpacity>
+        {isGroupChat ? (
+          <TouchableOpacity style={styles.callButton} onPress={handleGroupSettings}>
+            <MoreVertical size={20} color="#000" />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity style={styles.callButton} onPress={handleCall}>
+            <Phone size={20} color="#000" />
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Messages */}
@@ -307,6 +385,7 @@ export default function ChatScreen() {
         style={styles.messagesContainer}
         contentContainerStyle={styles.messagesContent}
         showsVerticalScrollIndicator={false}
+        keyboardDismissMode="on-drag"
       >
         {messages.map(renderMessage)}
       </ScrollView>
